@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+**/node_modules/
 .pnp
 .pnp.*
 .yarn/*
@@ -8,11 +9,13 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
-# Next.js
+# Build output
 .next/
-out/
+**/out/
 build/
+**/build/
 coverage/
+**/.cache/
 
 # Environment variables
 .env
@@ -44,3 +47,5 @@ next-env.d.ts
 
 # Misc
 *.pem
+.eslintcache
+**/.eslintcache

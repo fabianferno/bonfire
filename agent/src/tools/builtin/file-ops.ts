@@ -2,14 +2,11 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { assertInside } from '../../util/paths.js';
 
 export function makeFileOpsTools(rootDir: string) {
   const root = path.resolve(rootDir);
-  const safe = (p: string) => {
-    const abs = path.resolve(root, p);
-    if (!abs.startsWith(root + path.sep) && abs !== root) throw new Error('path escape');
-    return abs;
-  };
+  const safe = (p: string) => assertInside(root, p);
   return {
     fs_read: tool({
       description: 'Read a UTF-8 file from the sandbox.',

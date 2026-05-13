@@ -38,6 +38,5 @@ export function startEvolutionLoop(opts: {
     } catch (e) { log.warn({ err: e }, 'evolution tick failed'); }
   };
   const handle = setInterval(tick, intervalMs);
-  setTimeout(tick, 30_000).unref();
   return () => clearInterval(handle);
 }

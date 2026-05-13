@@ -6,6 +6,7 @@ import { ClawHubClient } from './registry-clients/clawhub.js';
 import { GitUrlClient } from './registry-clients/skills-sh.js';
 import type { InstallRequest } from './registry-clients/base.js';
 import { log } from '../util/logger.js';
+import { assertInside } from '../util/paths.js';
 
 export type EvolutionMode = 'off' | 'suggest' | 'auto-safe' | 'auto-all';
 
@@ -58,6 +59,11 @@ export async function installSkill(
 }
 
 export async function removeSkill(agentDir: string, slug: string): Promise<boolean> {
-  const dir = path.join(agentDir, 'skills', slug);
+  // Reject anything that isn't a single safe path segment.
+  if (!/^[A-Za-z0-9._-]+$/.test(slug)) return false;
+  const skillsRoot = path.resolve(agentDir, 'skills');
+  let dir: string;
+  try { dir = assertInside(skillsRoot, slug); }
+  catch { return false; }
   try { await fs.rm(dir, { recursive: true, force: true }); return true; } catch { return false; }
 }

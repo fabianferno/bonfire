@@ -23,9 +23,11 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
   app.get('/chat/stream/:id', (c) => {
     const id = c.req.param('id');
     return stream(c, async (s) => {
-      const unsub = web.subscribe(id, (chunk) => { s.write(`data: ${JSON.stringify({ chunk })}\n\n`); });
-      c.req.raw.signal.addEventListener('abort', () => { unsub(); });
-      await new Promise<void>(() => {});
+      let unsub = () => {};
+      await new Promise<void>((resolve) => {
+        unsub = web.subscribe(id, (chunk) => { s.write(`data: ${JSON.stringify({ chunk })}\n\n`); });
+        c.req.raw.signal.addEventListener('abort', () => { unsub(); resolve(); });
+      });
     });
   });
 

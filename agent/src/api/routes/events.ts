@@ -7,8 +7,9 @@ export function eventsRoutes(bus: EventEmitter) {
   app.get('/events', (c) => stream(c, async (s) => {
     const handler = (ev: any) => s.write(`data: ${JSON.stringify(ev)}\n\n`);
     bus.on('event', handler);
-    c.req.raw.signal.addEventListener('abort', () => bus.off('event', handler));
-    await new Promise<void>(() => {});
+    await new Promise<void>((resolve) => {
+      c.req.raw.signal.addEventListener('abort', () => { bus.off('event', handler); resolve(); });
+    });
   }));
   return app;
 }

@@ -22,7 +22,7 @@ export interface ApiDeps {
   reload: () => Promise<void>;
   restartMcp: () => Promise<void>;
   getConfig: () => AgentConfig;
-  patchConfig: (p: any) => Promise<void>;
+  patchConfig: (p: Partial<AgentConfig>) => Promise<void>;
   patchTelegram: (p: any) => Promise<void>;
 }
 

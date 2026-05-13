@@ -5,6 +5,7 @@ dist/
 logs/
 /memory/
 test/.tmp-mem.db
+test/.tmp-*.db
 examples/*/memory/
 examples/*/logs/
 examples/*/.env

@@ -49,3 +49,5 @@ next-env.d.ts
 *.pem
 .eslintcache
 **/.eslintcache
+web/build
+

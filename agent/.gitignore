@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+logs/
+memory/
+examples/*/memory/
+examples/*/logs/
+examples/*/.env
+test/fixtures/*/memory/
+test/fixtures/*/logs/

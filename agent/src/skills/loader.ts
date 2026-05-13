@@ -42,7 +42,10 @@ export async function loadSkills(agentDir: string): Promise<SkillRecord[]> {
   try { entries = await fs.readdir(skillsDir); } catch { return []; }
   const out: SkillRecord[] = [];
   for (const name of entries) {
+    if (name.startsWith('.')) continue;
     const dir = path.join(skillsDir, name);
+    const stat = await fs.stat(dir).catch(() => null);
+    if (!stat || !stat.isDirectory()) continue;
     const file = path.join(dir, 'SKILL.md');
     try {
       const raw = await fs.readFile(file, 'utf8');

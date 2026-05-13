@@ -66,3 +66,26 @@ export function publicUser(u: UserDoc) {
 export function privateUser(u: UserDoc) {
   return { ...publicUser(u), email: u.email, isService: u.isService };
 }
+
+export interface ProfileUpdate {
+  displayName?: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+}
+
+export async function updateUserProfile(db: Db, userId: ObjectId, patch: ProfileUpdate): Promise<UserDoc | null> {
+  const $set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.displayName !== undefined) $set.displayName = patch.displayName;
+  if (patch.avatarUrl !== undefined) $set.avatarUrl = patch.avatarUrl;
+  if (patch.bio !== undefined) $set.bio = patch.bio;
+  const res = await db.collection<UserDoc>(collections.users).findOneAndUpdate(
+    { _id: userId }, { $set }, { returnDocument: 'after' }
+  );
+  return res ?? null;
+}
+
+export async function updateUserPasswordHash(db: Db, userId: ObjectId, passwordHash: string): Promise<void> {
+  await db.collection<UserDoc>(collections.users).updateOne(
+    { _id: userId }, { $set: { passwordHash, updatedAt: new Date() } }
+  );
+}

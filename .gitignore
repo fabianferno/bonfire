@@ -51,3 +51,4 @@ next-env.d.ts
 **/.eslintcache
 web/build
 
+agent/bun.lock

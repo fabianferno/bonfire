@@ -8,7 +8,7 @@ import type { ChannelDoc } from '../../db/types.js';
 import { collections } from '../../db/types.js';
 import {
   SlugTakenError, createServer, listServersForUser, publicServer,
-  listServerMembers, publicMember,
+  listServerMembers, publicMember, addMember,
 } from '../../servers/service.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
@@ -102,6 +102,57 @@ export function serverRoutes(deps: ServerRouteDeps) {
         createdAt: ch.createdAt.toISOString(),
       })),
     });
+  });
+
+  const AddMemberBody = z.object({
+    principalType: z.enum(['user', 'agent']),
+    principalId: z.string().regex(/^[a-f0-9]{24}$/i),
+    role: z.enum(['admin', 'member']).optional(),
+    alias: z.string().max(64).nullish(),
+  });
+
+  app.post('/v1/servers/:sid/members', requireAuth, requireServerMember(deps.db, 'admin'), async (c) => {
+    const parsed = AddMemberBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
+    const principalId = new ObjectId(parsed.data.principalId);
+
+    const targetCollection = parsed.data.principalType === 'user' ? collections.users : collections.agents;
+    const exists = await deps.db.collection(targetCollection).findOne({ _id: principalId });
+    if (!exists) return c.json({ error: 'principal_not_found' }, 404);
+
+    const dup = await deps.db.collection(collections.serverMembers).findOne({
+      serverId: c.get('server')._id,
+      principalType: parsed.data.principalType,
+      principalId,
+    });
+    if (dup) return c.json({ error: 'already_a_member' }, 409);
+
+    const added = await addMember(deps.db, {
+      serverId: c.get('server')._id,
+      principalType: parsed.data.principalType,
+      principalId,
+      role: parsed.data.role ?? 'member',
+      alias: parsed.data.alias ?? null,
+    });
+    return c.json({ member: publicMember(added) }, 201);
+  });
+
+  app.delete('/v1/servers/:sid/members/:mid', requireAuth, requireServerMember(deps.db), async (c) => {
+    const mid = c.req.param('mid');
+    if (!ObjectId.isValid(mid)) return c.json({ error: 'invalid_member_id' }, 400);
+    const memberId = new ObjectId(mid);
+
+    const target = await deps.db.collection(collections.serverMembers).findOne({ _id: memberId, serverId: c.get('server')._id });
+    if (!target) return c.json({ error: 'not_found' }, 404);
+
+    const me = c.get('membership');
+    const selfLeave = target.principalType === 'user' && target.principalId.equals(c.get('user')._id);
+    const isAdmin = me.role === 'owner' || me.role === 'admin';
+    if (!selfLeave && !isAdmin) return c.json({ error: 'forbidden' }, 403);
+    if (target.role === 'owner') return c.json({ error: 'cannot_remove_owner' }, 400);
+
+    await deps.db.collection(collections.serverMembers).deleteOne({ _id: memberId });
+    return c.json({ ok: true });
   });
 
   return app;

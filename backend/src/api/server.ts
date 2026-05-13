@@ -3,6 +3,7 @@ import type { Db } from 'mongodb';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { serverRoutes } from './routes/servers.js';
+import { agentRoutes } from './routes/agents.js';
 
 export interface AppDeps { db: Db; jwtSecret: string; jwtExpiresIn: string; }
 
@@ -12,5 +13,6 @@ export function buildApp(deps: AppDeps) {
   app.route('/', authRoutes(deps));
   app.route('/', userRoutes(deps));
   app.route('/', serverRoutes(deps));
+  app.route('/', agentRoutes(deps));
   return app;
 }

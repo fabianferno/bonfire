@@ -3,7 +3,8 @@ dist/
 .env
 *.log
 logs/
-memory/
+/memory/
+test/.tmp-mem.db
 examples/*/memory/
 examples/*/logs/
 examples/*/.env

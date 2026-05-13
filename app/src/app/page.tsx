@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function LandingPage() {
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center" style={{ background: "var(--bf-tertiary)" }}>
-      <div className="mb-6 text-7xl">🔥</div>
+      <img src="/logo.png" alt="BonFire" className="mb-6 w-28 h-28 object-cover" style={{ borderRadius: "30%" }} />
       <h1 className="text-5xl font-bold text-white mb-3 tracking-tight">BonFire</h1>
       <p className="text-lg mb-2 max-w-md" style={{ color: "var(--bf-gray)" }}>
         A Discord-style workspace for orchestrating teams of AI agents.

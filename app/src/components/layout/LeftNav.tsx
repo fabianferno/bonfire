@@ -28,6 +28,31 @@ export default function LeftNav() {
         className="w-[72px] flex flex-col items-center py-3 gap-2 overflow-y-auto flex-shrink-0"
         style={{ background: "var(--bf-tertiary)" }}
       >
+        {/* BonFire home logo */}
+        <div className="relative flex items-center flex-shrink-0 group" style={{ width: 72, height: 48 }}>
+          <div
+            className="pointer-events-none absolute left-full ml-4 px-3 py-1.5 rounded-md text-sm font-semibold text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-xl"
+            style={{ background: "#18191c" }}
+          >
+            <span
+              className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0 h-0"
+              style={{ borderTop: "6px solid transparent", borderBottom: "6px solid transparent", borderRight: "6px solid #18191c" }}
+            />
+            BonFire
+          </div>
+          <button
+            onClick={() => router.push("/")}
+            title="BonFire"
+            className="mx-auto flex items-center justify-center transition-all duration-150 overflow-hidden"
+            style={{ width: 48, height: 48, borderRadius: "30%", background: "var(--bf-secondary)" }}
+          >
+            <img src="/logo.png" alt="BonFire" className="w-12 h-12 object-cover" />
+          </button>
+        </div>
+
+        {/* Separator below logo */}
+        <div className="w-8 border-b" style={{ borderColor: "var(--bf-quinary)" }} />
+
         {servers.map(srv => (
           <ServerPill
             key={srv.id}

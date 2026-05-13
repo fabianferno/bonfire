@@ -52,3 +52,18 @@ async function accumulateSse(body: ReadableStream<Uint8Array>): Promise<string> 
   for await (const chunk of sseChunks(body)) out += chunk;
   return out;
 }
+
+export interface OpenStreamHandle { streamId: string; upstreamUrl: string; }
+
+/** Phase 1: POST /chat/message and return the agent-issued streamId without consuming the stream yet. */
+export async function openAgentStream(input: { baseUrl: string; chatId: string; text: string }): Promise<OpenStreamHandle> {
+  const res = await fetch(`${input.baseUrl}/chat/message`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ userId: input.chatId, text: input.text }),
+  });
+  if (!res.ok) throw new Error(`agent /chat/message returned ${res.status}`);
+  const { streamId } = (await res.json()) as { streamId: string };
+  if (!streamId) throw new Error('agent did not return streamId');
+  return { streamId, upstreamUrl: `${input.baseUrl}/chat/stream/${streamId}` };
+}

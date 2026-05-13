@@ -2,13 +2,17 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
+import { stream } from 'hono/streaming';
 import { requireUser } from '../../auth/middleware.js';
 import { requireChannelAccess, type ChannelBindings } from '../../channels/middleware.js';
 import { resolveMentions } from '../../messages/mentions.js';
 import {
   insertMessage, listChannelMessages, findMessageById, deleteMessage, publicMessage,
 } from '../../messages/service.js';
-import { computeInvocationSet, runInvocation } from '../../agents/invoker.js';
+import { computeInvocationSet, runInvocation, startStreamingInvocation } from '../../agents/invoker.js';
+import { takeStream } from '../../messages/stream-registry.js';
+import { sseChunks } from '../../agents/client.js';
+import { log } from '../../util/logger.js';
 import { findMembership } from '../../servers/service.js';
 
 const PostMessageBody = z.object({
@@ -42,12 +46,49 @@ export function messageRoutes(deps: MessageRouteDeps) {
     });
 
     const agents = await computeInvocationSet({ db: deps.db, channel, userMessage });
-    const replies = await runInvocation({ db: deps.db, channel, userMessage }, agents);
 
+    if (parsed.data.stream) {
+      const handles = await startStreamingInvocation({ db: deps.db, channel, userMessage }, agents);
+      return c.json({
+        userMessage: publicMessage(userMessage),
+        replies: [],
+        streamIds: handles.map(h => h.streamId),
+      }, 201);
+    }
+
+    const replies = await runInvocation({ db: deps.db, channel, userMessage }, agents);
     return c.json({
       userMessage: publicMessage(userMessage),
       replies: replies.map(publicMessage),
     }, 201);
+  });
+
+  app.get('/v1/channels/:cid/stream/:streamId', requireAuth, requireChannelAccess(deps.db), async (c) => {
+    const streamId = c.req.param('streamId');
+    const pending = takeStream(streamId);
+    if (!pending) return c.json({ error: 'stream_not_found_or_expired' }, 404);
+    if (!pending.channel._id.equals(c.get('channel')._id)) {
+      return c.json({ error: 'stream_not_in_this_channel' }, 403);
+    }
+
+    return stream(c, async (s) => {
+      const upstream = await fetch(pending.upstreamUrl);
+      if (!upstream.ok || !upstream.body) {
+        s.write(`event: error\ndata: ${JSON.stringify({ status: upstream.status })}\n\n`);
+        return;
+      }
+      let finalText = '';
+      try {
+        for await (const chunk of sseChunks(upstream.body)) {
+          finalText += chunk;
+          s.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+        }
+      } finally {
+        try { await pending.onClose(finalText); }
+        catch (e) { log.warn({ err: e }, 'persist final stream message failed'); }
+        s.write(`event: done\ndata: {}\n\n`);
+      }
+    });
   });
 
   app.get('/v1/channels/:cid/messages', requireAuth, requireChannelAccess(deps.db), async (c) => {

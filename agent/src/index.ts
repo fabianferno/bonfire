@@ -35,7 +35,9 @@ async function main() {
     mcpHandles = await startMcpServers(loaded.mcp);
   };
 
-  const model = createChatModel(loaded.config);
+  const chatHandle = await createChatModel(loaded.config);
+  const model = chatHandle.model;
+  log.info(chatHandle.info, 'llm: chat model ready');
   const embedModel = createEmbeddingModel(loaded.config);
 
   const store = new MemoryStore(path.resolve(agentDir, loaded.config.memory.vectorStorePath));

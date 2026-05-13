@@ -1,10 +1,9 @@
 {
   "name": "Ember",
   "id": "ember-default",
-  "llm": { "baseUrl": "https://api.openai.com/v1", "model": "gpt-4o-mini" },
-  "embeddings": { "baseUrl": "https://api.openai.com/v1", "model": "text-embedding-3-small" },
+  "llm": { "provider": "zerog" },
   "channels": {
-    "telegram": { "enabled": false, "dmPolicy": "open" },
+    "telegram": { "enabled": true, "dmPolicy": "open" },
     "web": { "enabled": true, "path": "/chat" }
   },
   "tools": { "builtin": { "webFetch": { "enabled": true }, "webSearch": { "enabled": false, "provider": "tavily" } } },

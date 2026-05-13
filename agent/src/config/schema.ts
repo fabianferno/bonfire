@@ -1,9 +1,15 @@
 import { z } from 'zod';
 
 export const LlmConfigSchema = z.object({
-  baseUrl: z.string().url(),
-  model: z.string(),
+  provider: z.enum(['openai-compatible', 'zerog']).default('openai-compatible'),
+  // openai-compatible: required. zerog: optional (auto-discovered).
+  baseUrl: z.string().url().optional(),
+  model: z.string().optional(),
   apiKeyEnv: z.string().default('LLM_API_KEY'),
+  // 0G-specific (with env-var fallbacks for backwards compat)
+  rpcUrlEnv: z.string().default('OG_RPC_URL'),
+  privateKeyEnv: z.string().default('DEPLOYER_PRIVATE_KEY'),
+  preferredProviderEnv: z.string().default('OG_BROKER_PROVIDER'),
   temperature: z.number().default(0.7),
   maxTokens: z.number().default(4096),
 });

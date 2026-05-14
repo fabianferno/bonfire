@@ -19,7 +19,7 @@ describe('internal routes', () => {
   beforeEach(async () => { await cleanCollections(tdb.db); app = await makeApp(tdb.db); });
 
   async function setup() {
-    const alice = await registerAndLogin(app, { username: 'alice' });
+    const alice = await registerAndLogin(app, { username: 'alice' }, tdb.db);
     const create = await jsonReq(app, 'POST', '/v1/agents', {
       name: 'R', slug: 'researcher', baseUrl: 'http://x:7777',
       description: 'finds papers', tags: ['research'], visibility: 'public',

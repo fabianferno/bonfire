@@ -9,6 +9,7 @@ import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { internalRoutes } from './routes/internal.js';
 import { cascadeRoutes } from './routes/cascade.js';
+import type { InftDeps } from '../agents/invoker.js';
 
 export interface AppDeps {
   db: Db;
@@ -17,6 +18,8 @@ export interface AppDeps {
   cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number };
   /** Allowed CORS origins. Defaults to localhost dev origins. */
   corsOrigins?: string[];
+  /** Present when chain integration is configured (INFT_CONTRACT_ADDRESS + PLATFORM_EXECUTOR_PRIVATE_KEY). */
+  inftDeps?: InftDeps;
 }
 
 export function buildApp(deps: AppDeps) {
@@ -38,7 +41,7 @@ export function buildApp(deps: AppDeps) {
   app.route('/', serverRoutes(deps));
   app.route('/', agentRoutes(deps));
   app.route('/', channelRoutes(deps));
-  app.route('/', messageRoutes(deps));
+  app.route('/', messageRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, cascadeConfig: deps.cascadeConfig, inftDeps: deps.inftDeps }));
   app.route('/', internalRoutes({ db: deps.db }));
   app.route('/', cascadeRoutes(deps));
   return app;

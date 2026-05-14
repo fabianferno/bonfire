@@ -1,5 +1,4 @@
 import { BONFIRE_BASE_URL } from '@/lib/config';
-import { getToken } from '@/lib/auth';
 
 export class ApiError extends Error {
   constructor(
@@ -17,6 +16,27 @@ export interface ApiOptions {
   auth?: boolean;
 }
 
+/**
+ * Module-level token provider. Defaults to returning null (no auth).
+ *
+ * AuthProvider calls setAccessTokenProvider() in a useEffect to wire in
+ * Privy's getAccessToken() so every api() call attaches the correct header
+ * without coupling this module to React hooks or localStorage.
+ */
+let tokenProvider: () => Promise<string | null> = async () => null;
+
+/**
+ * Replace the active token provider.
+ *
+ * Called once by AuthProvider on mount (and whenever auth state changes) to
+ * inject Privy's getAccessToken function.
+ *
+ * @param fn - async function that resolves to the current access token or null
+ */
+export function setAccessTokenProvider(fn: () => Promise<string | null>): void {
+  tokenProvider = fn;
+}
+
 export async function api<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
@@ -31,8 +51,8 @@ export async function api<T>(
 
   const useAuth = opts.auth !== false;
   if (useAuth) {
-    const t = getToken();
-    if (t) headers['authorization'] = `Bearer ${t}`;
+    const tok = await tokenProvider();
+    if (tok) headers['authorization'] = `Bearer ${tok}`;
   }
 
   const res = await fetch(`${BONFIRE_BASE_URL}${path}`, {

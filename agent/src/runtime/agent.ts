@@ -7,7 +7,7 @@ import type { SkillRecord } from '../skills/loader.js';
 import type { MemoryStore } from '../memory/store.js';
 import { SessionManager } from './session.js';
 import { log } from '../util/logger.js';
-import type { InboundMessage } from '../channels/base.js';
+import type { InboundMessage, TenantPayload } from '../channels/base.js';
 import type { EmbeddingModel } from 'ai';
 import { embedText } from '../memory/embeddings.js';
 import type { TenantRegistry } from '../tenants/registry.js';
@@ -37,8 +37,9 @@ export class AgentRuntime {
   }
 
   /** Return a tenant-specific LanguageModelV1, building and caching it on first use. */
-  private async modelFor(tenant: Tenant | null, envOverride?: Record<string, string>): Promise<LanguageModelV1> {
-    const tenantEnv = tenant?.env ?? {};
+  private async modelFor(tenant: Tenant | TenantPayload | null, envOverride?: Record<string, string>): Promise<LanguageModelV1> {
+    // TenantPayload (inline) has no `env` field; Tenant (registry) may have one.
+    const tenantEnv = (tenant as Tenant | null)?.env ?? {};
     const override = envOverride ?? {};
     const effectiveEnv = { ...tenantEnv, ...override };
     const tenantLlm = tenant?.llm ?? {};
@@ -78,10 +79,13 @@ export class AgentRuntime {
   }
 
   async handle(msg: InboundMessage): Promise<void> {
-    // Resolve tenant-specific overrides when a tenant slug is provided
-    const tenant = msg.tenant && this.d.tenantRegistry
-      ? this.d.tenantRegistry.get(msg.tenant) ?? null
-      : null;
+    // Prefer inline decrypted bundle; fall back to registry slug lookup only when no inline payload.
+    // When tenantInline is provided, skip the registry entirely to avoid "tenant not found" log spam.
+    const tenant: Tenant | TenantPayload | null = msg.tenantInline
+      ? msg.tenantInline
+      : (msg.tenant && this.d.tenantRegistry
+          ? this.d.tenantRegistry.get(msg.tenant) ?? null
+          : null);
 
     const soul = tenant?.soul ?? this.d.loaded.soul;
     const agentRules = tenant?.agents ?? this.d.loaded.agents;

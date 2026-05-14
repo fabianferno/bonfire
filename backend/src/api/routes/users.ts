@@ -43,7 +43,7 @@ export function userRoutes(deps: UserRouteDeps) {
     const parsed = PasswordPatch.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body' }, 400);
     const me = c.get('user');
-    if (!(await verifyPassword(me.passwordHash, parsed.data.currentPassword))) {
+    if (!me.passwordHash || !(await verifyPassword(me.passwordHash, parsed.data.currentPassword))) {
       return c.json({ error: 'invalid_credentials' }, 401);
     }
     const newHash = await hashPassword(parsed.data.newPassword);

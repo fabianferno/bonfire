@@ -14,8 +14,9 @@ describe('resolveMentions', () => {
     const userId = new ObjectId();
     const serverId = new ObjectId();
     await tdb.db.collection(collections.users).insertOne({
-      _id: userId, username: 'alice', email: 'a@x', displayName: 'A',
-      passwordHash: '', avatarUrl: null, bio: null, isService: false,
+      _id: userId, username: 'alice', privyDid: 'did:privy:mentions-test', walletAddress: null,
+      email: 'a@x', passwordHash: null, displayName: 'A',
+      avatarUrl: null, bio: null, isService: false,
       createdAt: new Date(), updatedAt: new Date(),
     } as any);
     await tdb.db.collection(collections.serverMembers).insertOne({

@@ -11,6 +11,14 @@ const EnvSchema = z.object({
   MAX_CASCADE_HOPS: z.coerce.number().int().nonnegative().default(5),
   MAX_INVOCATIONS_PER_ROOT: z.coerce.number().int().positive().default(20),
   OG_RPC_URL: z.string().url().default('https://evmrpc-testnet.0g.ai'),
+  // INFT integration — all optional. When all three are present, the backend
+  // wires up the chain client, 0G Storage, and chain-event indexer at boot.
+  INFT_CONTRACT_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),
+  PLATFORM_EXECUTOR_PRIVATE_KEY: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
+  OG_STORAGE_MOCK: z.string().optional(),
+  // Privy auth — required when Privy middleware is active.
+  PRIVY_APP_ID: z.string().optional(),
+  PRIVY_APP_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

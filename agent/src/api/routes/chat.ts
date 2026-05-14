@@ -3,7 +3,28 @@ import { stream } from 'hono/streaming';
 import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'node:path';
 import fs from 'node:fs';
+import { z } from 'zod';
 import type { WebChatAdapter } from '../../channels/web.js';
+import type { TenantPayload } from '../../channels/base.js';
+
+/** Zod schema for an inline decrypted tenant bundle.
+ * Only the fields the runtime needs are required; metadata fields (avatarUrl, tags, etc.)
+ * live in the public manifest and are not needed at inference time.
+ */
+const TenantPayloadSchema = z.object({
+  slug: z.string().regex(/^[a-z0-9_-]{1,32}$/),
+  name: z.string().min(1).max(64),
+  soul: z.string(),
+  agents: z.string(),
+  llm: z.object({
+    provider: z.enum(['openai-compatible', 'zerog']).optional(),
+    baseUrl: z.string().optional(),
+    model: z.string().optional(),
+    apiKeyEnv: z.string().optional(),
+    temperature: z.number().optional(),
+    maxTokens: z.number().optional(),
+  }).default({}),
+});
 
 export function chatRoutes(web: WebChatAdapter, publicDir: string) {
   const app = new Hono();
@@ -14,9 +35,26 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
   });
 
   app.post('/chat/message', async (c) => {
-    const { userId = 'anonymous', text, tenant, envOverride } = await c.req.json();
+    const body = await c.req.json();
+    const { userId = 'anonymous', text, envOverride } = body;
     if (!text) return c.json({ error: 'text required' }, 400);
-    const streamId = await web.enqueue(userId, text, tenant ?? undefined, envOverride ?? undefined);
+
+    // Resolve tenant: object → inline payload (validated), string → legacy slug lookup.
+    let tenantSlug: string | undefined;
+    let tenantInline: TenantPayload | undefined;
+    if (body.tenant !== undefined && body.tenant !== null) {
+      if (typeof body.tenant === 'string') {
+        tenantSlug = body.tenant;
+      } else {
+        const parsed = TenantPayloadSchema.safeParse(body.tenant);
+        if (!parsed.success) {
+          return c.json({ error: 'invalid tenant payload', details: parsed.error.issues }, 400);
+        }
+        tenantInline = parsed.data as TenantPayload;
+      }
+    }
+
+    const streamId = await web.enqueue(userId, text, tenantSlug, envOverride ?? undefined, tenantInline);
     return c.json({ streamId });
   });
 

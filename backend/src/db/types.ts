@@ -2,8 +2,10 @@ import type { ObjectId } from 'mongodb';
 
 export interface UserDoc {
   _id: ObjectId;
-  email: string;
-  passwordHash: string;
+  privyDid: string;               // Privy user DID, e.g. "did:privy:xyz...", unique
+  walletAddress: string | null;   // embedded wallet address from Privy, 0x...; null until provisioned
+  email: string | null;           // optional — some Privy logins are social-only
+  passwordHash: string | null;    // deprecated; only legacy users
   username: string;
   displayName: string;
   avatarUrl: string | null;
@@ -27,6 +29,31 @@ export interface AgentDoc {
   createdBy: ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  // INFT fields — optional during migration (legacy agents won't have these)
+  tokenId?: string;               // bigint serialized as string (Mongo can't hold full uint256)
+  contractAddress?: string;       // 0x...
+  ownerWallet?: string;           // 0x... (denormalized from chain; refreshed on indexer events)
+  mode?: 'public' | 'permissioned';
+  manifestUri?: string;
+  bundleUri?: string;
+  sealedDEKBaseUri?: string;
+  bundleHash?: string;            // hex string
+}
+
+// TTL-cleaned up via the expiresAt Mongo TTL index.
+export interface MintReservationDoc {
+  _id: ObjectId;
+  reservedId: string;             // uuid, returned to client and echoed on /mint/confirm
+  userId: ObjectId;               // FK -> users
+  slug: string;                   // claimed slug (transient lock)
+  manifestUri: string;
+  bundleUri: string;
+  sealedDEKBaseUri: string;
+  bundleHash: string;
+  mode: 'public' | 'permissioned';
+  status: 'uploaded' | 'minted' | 'expired';
+  createdAt: Date;
+  expiresAt: Date;                // TTL anchor — Mongo TTL index drops expired rows
 }
 
 export interface ServerWalletDoc {
@@ -97,4 +124,5 @@ export const collections = {
   serverMembers: 'serverMembers',
   channels: 'channels',
   messages: 'messages',
+  mintReservations: 'mintReservations',
 } as const;

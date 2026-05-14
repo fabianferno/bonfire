@@ -22,7 +22,12 @@ export interface InvocationContext {
 
 export async function computeInvocationSet(ctx: InvocationContext): Promise<AgentDoc[]> {
   const ids = new Set<string>();
-  if (ctx.channel.defaultAgentId) ids.add(ctx.channel.defaultAgentId.toHexString());
+  // Discord convention: when the user @-mentions specific agents, only those reply.
+  // The channel's default agent stays quiet on targeted messages.
+  const userMentionedAnyAgent = ctx.userMessage.mentions.some(m => m.type === 'agent');
+  if (!userMentionedAnyAgent && ctx.channel.defaultAgentId) {
+    ids.add(ctx.channel.defaultAgentId.toHexString());
+  }
   for (const m of ctx.userMessage.mentions) {
     if (m.type === 'agent') ids.add(m.id.toHexString());
   }

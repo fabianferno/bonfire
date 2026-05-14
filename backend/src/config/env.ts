@@ -4,6 +4,8 @@ import { z } from 'zod';
 const EnvSchema = z.object({
   MONGODB_URI: z.string().min(1),
   MONGODB_DB: z.string().min(1),
+  /** Dev only: ephemeral Mongo via mongodb-memory-server — no Docker/local mongod. Set to 1, true, or yes. */
+  DEV_MEMORY_MONGO: z.string().optional(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 chars'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   PORT: z.coerce.number().int().positive().default(8080),
@@ -19,6 +21,8 @@ const EnvSchema = z.object({
   // Privy auth — required when Privy middleware is active.
   PRIVY_APP_ID: z.string().optional(),
   PRIVY_APP_SECRET: z.string().optional(),
+  /** Comma-separated origins; merges with sensible localhost defaults when omitted. */
+  CORS_ORIGINS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

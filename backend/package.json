@@ -8,11 +8,13 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:no-docker": "DEV_MEMORY_MONGO=1 tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "send-og": "node scripts/send-og-native.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",

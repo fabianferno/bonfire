@@ -1,7 +1,7 @@
 import type { Context, Next, MiddlewareHandler } from 'hono';
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { verifyPrivyToken } from './privy.js';
+import { verifyPrivyToken, PrivyEnvError } from './privy.js';
 import { collections } from '../db/types.js';
 import type { UserDoc } from '../db/types.js';
 import { log } from '../util/logger.js';
@@ -37,8 +37,11 @@ export function requireUser(db: Db, _jwtSecret?: string): MiddlewareHandler<Auth
     let claims;
     try {
       claims = await verifyPrivyToken(token);
-    } catch {
-      // verifyPrivyToken already logged the underlying error with redaction.
+    } catch (e) {
+      if (e instanceof PrivyEnvError) {
+        log.error({ msg: e.message }, 'Privy server env misconfigured — protected routes cannot verify tokens');
+        return c.json({ error: 'privy_server_misconfigured', message: e.message }, 503);
+      }
       return c.json({ error: 'unauthorized' }, 401);
     }
 

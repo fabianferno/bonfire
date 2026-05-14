@@ -5,14 +5,14 @@ interface AvatarProps {
   name: string;
   size?: number;
   color?: string;
+  emoji?: string;
   className?: string;
 }
 
-export default function Avatar({ src, name, size = 32, color = "#6e86d6", className = "" }: AvatarProps) {
-  const initial = name.charAt(0).toUpperCase();
+export default function Avatar({ src, name, size = 32, color = "#6e86d6", emoji, className = "" }: AvatarProps) {
   const style = { width: size, height: size, minWidth: size, minHeight: size };
 
-  if (src) {
+  if (src && !src.startsWith("#")) {
     return (
       <img
         src={src}
@@ -23,12 +23,18 @@ export default function Avatar({ src, name, size = 32, color = "#6e86d6", classN
     );
   }
 
+  const bgColor = src?.startsWith("#") ? src : color;
+
   return (
     <div
-      style={{ ...style, background: color }}
+      style={{ ...style, background: bgColor }}
       className={`rounded-full flex items-center justify-center text-white font-bold select-none ${className}`}
     >
-      <span style={{ fontSize: size * 0.4 }}>{initial}</span>
+      {emoji ? (
+        <span style={{ fontSize: size * 0.52, lineHeight: 1 }}>{emoji}</span>
+      ) : (
+        <span style={{ fontSize: size * 0.4 }}>{name.charAt(0).toUpperCase()}</span>
+      )}
     </div>
   );
 }

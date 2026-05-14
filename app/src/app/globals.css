@@ -3,21 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --bf-primary:    #36393f;
-  --bf-secondary:  #2f3136;
-  --bf-tertiary:   #202225;
-  --bf-quaternary: #292b2f;
-  --bf-quinary:    #393d42;
-  --bf-white:      #ffffff;
-  --bf-gray:       #8a8c90;
-  --bf-symbol:     #74777a;
-  --bf-senary:     #828386;
-  --bf-accent:     #6e86d6;
-  --bf-fire:       #f97316;
-  --bf-green:      #43b581;
-  --bf-yellow:     #faa61a;
-  --bf-red:        #f04747;
-  --bf-chat-input: rgb(64,68,75);
+  /* High-contrast dark — deeper blacks, crisper whites */
+  --bf-primary:    #1e2124;
+  --bf-secondary:  #282b30;
+  --bf-tertiary:   #111214;
+  --bf-quaternary: #1a1c1f;
+  --bf-quinary:    #313438;
+  --bf-white:      #f2f3f5;
+  --bf-gray:       #a0a3a8;
+  --bf-symbol:     #6d7178;
+  --bf-senary:     #8e9197;
+  --bf-accent:     #7c9cf5;
+  --bf-fire:       #fb923c;
+  --bf-green:      #57c98a;
+  --bf-yellow:     #fbbf24;
+  --bf-red:        #f05b5b;
+  --bf-chat-input: rgb(48,52,57);
+  --bf-border:     rgba(255,255,255,0.06);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,7 +28,8 @@ body {
   background: var(--bf-tertiary);
   color: var(--bf-white);
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .font-display {
@@ -37,6 +40,6 @@ body {
   line-height: 0.95;
   text-transform: uppercase;
 }
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: var(--bf-quaternary); border-radius: 3px; }
+::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar-thumb { background: var(--bf-quaternary); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

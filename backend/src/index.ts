@@ -8,10 +8,36 @@ import { createInftChain } from './chain/inft.js';
 import { createChainIndexer } from './chain/indexer.js';
 import { createOgStorage } from './storage-0g/index.js';
 import type { InftDeps } from './agents/invoker.js';
+import { attachSignalingServer } from './voice/signaling.js';
+
+function useDevMemoryMongo(raw: string | undefined): boolean {
+  if (!raw) return false;
+  return ['1', 'true', 'yes'].includes(raw.trim().toLowerCase());
+}
 
 async function main() {
   const env = loadEnv();
-  const { db, close: closeDb } = await connectDb(env);
+  let mongoUri = env.MONGODB_URI;
+
+  let stopMemoryMongo: (() => Promise<void>) | undefined;
+  if (useDevMemoryMongo(env.DEV_MEMORY_MONGO)) {
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    const memoryServer = await MongoMemoryServer.create();
+    mongoUri = memoryServer.getUri();
+    stopMemoryMongo = async () => {
+      await memoryServer.stop();
+    };
+    log.warn({ uri: mongoUri.replace(/mongodb:\/\/[^:]+:[^@]+@/, 'mongodb://***@') }, 'DEV_MEMORY_MONGO enabled (ephemeral DB, data lost on exit)');
+  }
+
+  const { db, close: closeDbClient } = await connectDb({
+    ...env,
+    MONGODB_URI: mongoUri,
+  });
+  const closeDb = async () => {
+    await closeDbClient();
+    if (stopMemoryMongo) await stopMemoryMongo();
+  };
   await createIndexes(db);
   log.info({ db: env.MONGODB_DB }, 'mongo connected');
 
@@ -30,9 +56,26 @@ async function main() {
     log.warn('INFT integration disabled — set INFT_CONTRACT_ADDRESS + PLATFORM_EXECUTOR_PRIVATE_KEY to enable');
   }
 
-  const app = buildApp({ db, jwtSecret: env.JWT_SECRET, jwtExpiresIn: env.JWT_EXPIRES_IN, inftDeps });
+  const privyIncomplete = !(env.PRIVY_APP_ID?.trim() && env.PRIVY_APP_SECRET?.trim());
+  if (privyIncomplete) {
+    log.warn(
+      'Privy server keys missing — set PRIVY_APP_ID and PRIVY_APP_SECRET in backend/.env (Privy Dashboard). Must match NEXT_PUBLIC_PRIVY_APP_ID.',
+    );
+  }
+
+  const corsExtra = env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
+
+  const app = buildApp({
+    db,
+    jwtSecret: env.JWT_SECRET,
+    jwtExpiresIn: env.JWT_EXPIRES_IN,
+    inftDeps,
+    corsOrigins: corsExtra?.length ? corsExtra : undefined,
+  });
   const server = serve({ fetch: app.fetch, port: env.PORT });
-  log.info({ port: env.PORT }, 'ready');
+  // Attach WebRTC signaling server on the same port at ws://host/voice
+  attachSignalingServer(server as unknown as import('http').Server);
+  log.info({ port: env.PORT }, 'ready (voice signaling on ws://localhost:' + env.PORT + '/voice)');
 
   const shutdown = async () => {
     log.info('shutting down');

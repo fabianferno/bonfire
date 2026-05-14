@@ -9,6 +9,14 @@
 import { PrivyClient } from '@privy-io/server-auth';
 import { log } from '../util/logger.js';
 
+/** Thrown before token verification when server env lacks Privy credentials. */
+export class PrivyEnvError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PrivyEnvError';
+  }
+}
+
 export interface PrivyClaims {
   /** Privy DID, e.g. "did:privy:abc123..." */
   privyDid: string;
@@ -34,7 +42,9 @@ export function getPrivyClient(): PrivyClient {
   const appSecret = process.env.PRIVY_APP_SECRET;
 
   if (!appId || !appSecret) {
-    throw new Error('PRIVY_APP_ID and PRIVY_APP_SECRET must be set');
+    throw new PrivyEnvError(
+      'Set PRIVY_APP_ID and PRIVY_APP_SECRET in backend/.env (Privy Dashboard → Apps → Your app → Basics & API Keys). Values must match the same app as NEXT_PUBLIC_PRIVY_APP_ID on the frontend.',
+    );
   }
 
   _privyClient = new PrivyClient(appId, appSecret);

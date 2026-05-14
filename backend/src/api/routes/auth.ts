@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { verifyPrivyToken } from '../../auth/privy.js';
+import { verifyPrivyToken, PrivyEnvError } from '../../auth/privy.js';
 import { requireUser, type AuthBindings } from '../../auth/middleware.js';
 import { collections } from '../../db/types.js';
 import type { UserDoc } from '../../db/types.js';
@@ -45,7 +45,10 @@ export function authRoutes(deps: AuthRouteDeps) {
     let claims;
     try {
       claims = await verifyPrivyToken(token);
-    } catch {
+    } catch (e) {
+      if (e instanceof PrivyEnvError) {
+        return c.json({ error: 'privy_server_misconfigured', message: e.message }, 503);
+      }
       return c.json({ error: 'unauthorized' }, 401);
     }
 

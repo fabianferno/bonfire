@@ -616,13 +616,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setServers((prev) =>
           prev.map((s) => (s.id !== serverId ? s : { ...s, agents })),
         );
-      } catch {
-        // Fall back to optimistic local add
-        setServers((prev) =>
-          prev.map((s) =>
-            s.id !== serverId ? s : { ...s, agents: [...s.agents, agent] },
-          ),
-        );
+      } catch (err) {
+        // Re-throw so callers (e.g. InviteToServerModal) can handle HTTP status codes
+        throw err;
       }
     },
     [],

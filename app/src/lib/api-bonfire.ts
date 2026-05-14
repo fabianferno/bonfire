@@ -70,7 +70,14 @@ export const bf = {
     body: { principalType: 'user' | 'agent'; principalId: string },
   ) => api<{ member: BackendMember }>('POST', `/v1/servers/${sid}/members`, body),
 
-  listAgents: () => api<{ agents: BackendAgent[] }>('GET', '/v1/agents'),
+  listAgents: (opts: { q?: string; tag?: string; limit?: number } = {}) => {
+    const sp = new URLSearchParams();
+    if (opts.q) sp.set('q', opts.q);
+    if (opts.tag) sp.set('tag', opts.tag);
+    if (opts.limit) sp.set('limit', String(opts.limit));
+    const qs = sp.toString();
+    return api<{ agents: BackendAgent[] }>('GET', `/v1/agents${qs ? '?' + qs : ''}`, undefined, { auth: false });
+  },
 
   getAgent: (aidOrSlug: string) =>
     api<{ agent: BackendAgent }>('GET', `/v1/agents/${aidOrSlug}`),

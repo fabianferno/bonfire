@@ -244,6 +244,8 @@ export function prepareInvocationText(input: PrepareInvocationInput): string {
     protocol = `\n[CHANNEL PROTOCOL — read first]
 You are @${input.target.slug} in channel #${input.channel.name}, replying to ${input.speakerLabel} (a human). Other agents available in this channel: ${peers.join(', ')}.
 
+PEERS ARE NOT TOOLS: Peer agents are summoned by writing their @-handle in your plain-text reply. They are NOT function/tool calls — never attempt to call them as a tool or function (e.g., do not emit a tool call to "joke_bot" or "critic"). The only way to involve a peer is to mention them by @-handle in your text.
+
 FORWARDING RULE: If the human's message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@", e.g. "tell critic" or "@critic"), you MUST:
   1. First give your full, substantive answer to the human's request — never reply with only an @-mention.
   2. Then, on a NEW LINE at the END of your reply, write the peer's literal @-handle (e.g., "@critic") and nothing else on that line.

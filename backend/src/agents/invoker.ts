@@ -1,7 +1,7 @@
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { collections } from '../db/types.js';
-import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc } from '../db/types.js';
+import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc, ServerDoc } from '../db/types.js';
 import { findAgentByIdOrSlug } from './registry.js';
 import { findUserById } from '../users/service.js';
 import { invokeAgent, openAgentStream } from './client.js';
@@ -45,13 +45,17 @@ export async function computeInvocationSet(ctx: InvocationContext): Promise<Agen
 
 export interface StreamingHandle { streamId: string; agent: AgentDoc; }
 
-export async function startStreamingInvocation(ctx: InvocationContext, agents: AgentDoc[]): Promise<StreamingHandle[]> {
+export async function startStreamingInvocation(
+  ctx: InvocationContext,
+  agents: AgentDoc[],
+  envOverride?: Record<string, string>,
+): Promise<StreamingHandle[]> {
   const handles: StreamingHandle[] = [];
   const chatId = chatIdForChannel(ctx.channel._id);
   for (const agent of agents) {
     try {
       const { streamId, upstreamUrl } = await openAgentStream({
-        baseUrl: agent.baseUrl, chatId, text: ctx.userMessage.content, tenant: agent.slug,
+        baseUrl: agent.baseUrl, chatId, text: ctx.userMessage.content, tenant: agent.slug, envOverride,
       });
       registerStream({
         streamId,
@@ -127,6 +131,19 @@ export interface CascadeContext {
   channel: ChannelDoc;
   rootMessage: MessageDoc;
   config?: Partial<CascadeConfig>;
+  /** Server doc for the channel's server — used to derive the 0G wallet envOverride for inference. */
+  server?: ServerDoc;
+}
+
+/**
+ * Builds the envOverride map for a server's 0G wallet private key.
+ *
+ * Returns undefined when no wallet is present so the caller can omit the field entirely,
+ * rather than sending an empty object that the agent would still try to interpret.
+ */
+function envOverrideFromServer(server?: ServerDoc): Record<string, string> | undefined {
+  if (!server?.wallet?.privateKey) return undefined;
+  return { DEPLOYER_PRIVATE_KEY: server.wallet.privateKey };
 }
 
 interface QueuedInvocation {
@@ -137,6 +154,8 @@ interface QueuedInvocation {
 
 export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
   const config: CascadeConfig = { ...DEFAULT_CASCADE, ...(ctx.config ?? {}) };
+  // Derive once so all hops within this cascade use the same server wallet.
+  const envOverride = envOverrideFromServer(ctx.server);
 
   // cascadeEnabled === false → direct-only fallback (no follow-up of agent mentions)
   if (ctx.channel.cascadeEnabled === false) {
@@ -145,7 +164,7 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
     });
     return runInvocationLinked({
       db: ctx.db, channel: ctx.channel, parent: ctx.rootMessage, agents: direct,
-      hop: 1, rootId: ctx.rootMessage._id,
+      hop: 1, rootId: ctx.rootMessage._id, envOverride,
     });
   }
 
@@ -173,7 +192,7 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
 
     const replies = await runInvocationLinked({
       db: ctx.db, channel: ctx.channel, parent: next.parentMessage, agents: [next.agent],
-      hop: next.hop, rootId: ctx.rootMessage._id,
+      hop: next.hop, rootId: ctx.rootMessage._id, envOverride,
     });
     totalInvocations++;
     out.push(...replies);
@@ -242,6 +261,8 @@ async function runInvocationLinked(args: {
   agents: AgentDoc[];
   hop: number;
   rootId: ObjectId;
+  /** Per-request env overrides forwarded to the agent (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
+  envOverride?: Record<string, string>;
 }): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
   const chatId = chatIdForChannel(args.channel._id);
@@ -261,6 +282,7 @@ async function runInvocationLinked(args: {
         chatId,
         text,
         tenant: agent.slug,
+        envOverride: args.envOverride,
       });
       const persisted = await insertMessage(args.db, {
         channelId: args.channel._id,

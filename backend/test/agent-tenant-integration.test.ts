@@ -326,6 +326,43 @@ describe('agent-tenant integration', () => {
     expect(patchCall!.body).not.toHaveProperty('llm');
   });
 
+  it('cascade invocation passes envOverride.DEPLOYER_PRIVATE_KEY from the server wallet', async () => {
+    const app = await makeApp(tdb.db);
+    const me = await registerAndLogin(app);
+
+    // Create a server — wallet is generated automatically by the server creation handler.
+    const sRes = await jsonReq(app, 'POST', '/v1/servers', { name: 'PK', slug: 'pkwallet' }, me.token);
+    expect(sRes.status).toBe(201);
+    const serverWalletPK = sRes.body.wallet.privateKey;
+    expect(serverWalletPK).toMatch(/^0x[a-fA-F0-9]{64}$/);
+
+    // Register an agent and add it to the server as a channel default.
+    const aRes = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'PkAgent', slug: 'pk-agent',
+      baseUrl: `http://127.0.0.1:${port}`,
+      description: 'Test', visibility: 'public',
+    }, me.token);
+    expect(aRes.status).toBe(201);
+    await jsonReq(app, 'POST', `/v1/servers/${sRes.body.server.id}/members`,
+      { principalType: 'agent', principalId: aRes.body.agent.id }, me.token);
+    const chRes = await jsonReq(app, 'POST', `/v1/servers/${sRes.body.server.id}/channels`,
+      { name: 'pkchan', defaultAgentId: aRes.body.agent.id }, me.token);
+    expect(chRes.status).toBe(201);
+
+    // Clear prior call records so only the next invocation is inspected.
+    fake.chatCalls.length = 0;
+
+    // Post a message → triggers cascade → agent invocation with envOverride.
+    const post = await jsonReq(app, 'POST', `/v1/channels/${chRes.body.channel.id}/messages`,
+      { content: 'hi' }, me.token);
+    expect(post.status).toBe(201);
+
+    expect(fake.chatCalls.length).toBeGreaterThanOrEqual(1);
+    const call = fake.chatCalls[fake.chatCalls.length - 1];
+    expect(call.body.envOverride).toBeTruthy();
+    expect((call.body.envOverride as any).DEPLOYER_PRIVATE_KEY).toBe(serverWalletPK);
+  });
+
   it('cascade invocation passes tenant: agent.slug to the agent /chat/message', async () => {
     const app = await makeApp(tdb.db);
     const me = await registerAndLogin(app);

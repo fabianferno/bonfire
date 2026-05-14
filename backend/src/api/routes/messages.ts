@@ -11,6 +11,7 @@ import {
 } from '../../messages/service.js';
 import { computeInvocationSet, startStreamingInvocation, runCascade } from '../../agents/invoker.js';
 import { collections } from '../../db/types.js';
+import type { ServerDoc } from '../../db/types.js';
 import { takeStream } from '../../messages/stream-registry.js';
 import { sseChunks } from '../../agents/client.js';
 import { log } from '../../util/logger.js';
@@ -57,10 +58,16 @@ export function messageRoutes(deps: MessageRouteDeps) {
     );
     const userMsgWithMeta = await deps.db.collection(collections.messages).findOne({ _id: userMessage._id });
 
+    // Fetch the server once so both paths can pass the wallet key as envOverride.
+    const server = await deps.db.collection<ServerDoc>(collections.servers).findOne({ _id: channel.serverId });
+
     if (parsed.data.stream) {
       // Streaming path remains single-hop in v1.
       const agents = await computeInvocationSet({ db: deps.db, channel, userMessage });
-      const handles = await startStreamingInvocation({ db: deps.db, channel, userMessage }, agents);
+      const envOverride = server?.wallet?.privateKey
+        ? { DEPLOYER_PRIVATE_KEY: server.wallet.privateKey }
+        : undefined;
+      const handles = await startStreamingInvocation({ db: deps.db, channel, userMessage }, agents, envOverride);
       return c.json({
         userMessage: publicMessage(userMsgWithMeta as any),
         replies: [],
@@ -73,6 +80,7 @@ export function messageRoutes(deps: MessageRouteDeps) {
       channel,
       rootMessage: userMsgWithMeta as any,
       config: deps.cascadeConfig,
+      server: server ?? undefined,
     });
     return c.json({
       userMessage: publicMessage(userMsgWithMeta as any),

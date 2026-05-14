@@ -4,6 +4,8 @@ export interface InvokeAgentInput {
   text: string;
   /** Tenant slug — routes to a named personality on the agent. */
   tenant?: string;
+  /** Per-request env overrides forwarded to the agent runtime (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
+  envOverride?: Record<string, string>;
   /** Abort signal for upstream call. */
   signal?: AbortSignal;
 }
@@ -11,6 +13,9 @@ export interface InvokeAgentInput {
 export async function invokeAgent(input: InvokeAgentInput): Promise<string> {
   const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
   if (input.tenant) body.tenant = input.tenant;
+  if (input.envOverride && Object.keys(input.envOverride).length > 0) {
+    body.envOverride = input.envOverride;
+  }
   const msgRes = await fetch(`${input.baseUrl}/chat/message`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -60,9 +65,19 @@ async function accumulateSse(body: ReadableStream<Uint8Array>): Promise<string> 
 export interface OpenStreamHandle { streamId: string; upstreamUrl: string; }
 
 /** Phase 1: POST /chat/message and return the agent-issued streamId without consuming the stream yet. */
-export async function openAgentStream(input: { baseUrl: string; chatId: string; text: string; tenant?: string }): Promise<OpenStreamHandle> {
+export async function openAgentStream(input: {
+  baseUrl: string;
+  chatId: string;
+  text: string;
+  tenant?: string;
+  /** Per-request env overrides forwarded to the agent runtime (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
+  envOverride?: Record<string, string>;
+}): Promise<OpenStreamHandle> {
   const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
   if (input.tenant) body.tenant = input.tenant;
+  if (input.envOverride && Object.keys(input.envOverride).length > 0) {
+    body.envOverride = input.envOverride;
+  }
   const res = await fetch(`${input.baseUrl}/chat/message`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

@@ -2,6 +2,9 @@ packages:
   - "mcp-server"
 
 allowBuilds:
-  argon2: set this to true or false
-  esbuild: set this to true or false
-  mongodb-memory-server: set this to true or false
+  argon2: true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  mongodb-memory-server: true
+  utf-8-validate: true

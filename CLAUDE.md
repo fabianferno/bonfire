@@ -4,17 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo shape
 
-The repo is a single TypeScript service plus product docs. Everything buildable lives in [agent/](agent/) — work from there. Top-level files ([prd.md](prd.md), [agent-prd.md](agent-prd.md), [resources.md](resources.md), [judging-criteria.md](judging-criteria.md), [docs/superpowers/plans/](docs/superpowers/plans/)) are product/design context for the hackathon submission, not code.
+Two buildable trees plus product docs:
 
-`bonfire` is the umbrella product; `ember-agent` (in `agent/`) is the standalone agent runtime that BonFire wraps. The agent service is intentionally self-contained and Dockerizable — assume one agent per directory, no multi-tenant logic.
+- [agent/](agent/) — `ember-agent`, the standalone agent runtime (TypeScript/Node, pnpm, Dockerizable). Self-contained, one agent per directory, no multi-tenant logic.
+- [app/](app/) — the BonFire wrapper UI (Next.js 14, npm). The marketplace + workspace surfaces that consume the agent runtime.
+
+`bonfire` is the umbrella product; `ember-agent` is what BonFire wraps. Top-level files ([prd.md](prd.md), [agent-prd.md](agent-prd.md), [resources.md](resources.md), [judging-criteria.md](judging-criteria.md), [docs/superpowers/plans/](docs/superpowers/plans/)) are product/design context for the hackathon submission, not code.
 
 ## Commands
 
-All commands run from [agent/](agent/) (Node ≥ 20, pnpm):
+### Agent runtime (from [agent/](agent/), Node ≥ 20, pnpm)
 
 ```bash
 pnpm install
-pnpm dev            # tsx watch on src/index.ts, boots examples/default-agent
+pnpm dev            # tsx watch on src/index.ts; passes examples/default-agent as argv[2] (bypasses $AGENT_DIR fallback)
 pnpm build          # tsc -> dist/
 pnpm start          # node dist/index.js (expects an agent dir as $AGENT_DIR or argv[2])
 pnpm typecheck      # tsc --noEmit
@@ -27,6 +30,18 @@ pnpm test -- -t "handles a message"          # by test name
 Docker (from `agent/docker/`): `docker compose up --build` — builds the image, mounts `examples/default-agent` at `/agent`, exposes `:7777`. The Dockerfile's ENTRYPOINT is hardcoded to `node dist/index.js /agent`.
 
 `.env` lives at `agent/.env` (see `.env.example`). The compose file reads `../.env`, so the same file works for both `pnpm dev` and Docker.
+
+### App (from [app/](app/), npm)
+
+```bash
+npm install
+npm run dev         # next dev (default :3000)
+npm run build       # next build
+npm run start       # next start
+npm run lint        # eslint (flat config, eslint-config-next)
+```
+
+The app is npm-based (`package-lock.json`); the agent is pnpm-based (`pnpm-lock.yaml`). Don't mix package managers across either tree.
 
 ## Architecture
 
@@ -87,9 +102,10 @@ The chat UI is a single static file at [agent/public/chat.html](agent/public/cha
 ## Conventions
 
 - **ESM throughout.** Imports use `.js` extensions even for `.ts` source — required for Node's NodeNext module resolution. Don't drop them.
+- **Path safety:** any code that resolves user-supplied paths under `agentDir` must go through `assertInside` in [src/util/paths.ts](agent/src/util/paths.ts) — it's `realpath`-based, tolerates non-existent targets, and blocks symlink escape. The skills installer/remover are the canonical examples; treat any new path-handling code the same way.
 - **Logging:** use `log` from [src/util/logger.ts](agent/src/util/logger.ts). It's a `pino` instance with redaction rules for `token`, `apiKey`, `botToken`, and auth headers — extend `redact.paths` when adding new sensitive fields rather than logging selectively.
 - **Validation at the edge:** every external input (config files, `mcp.json`, HTTP `PATCH /config` bodies) is parsed through a Zod schema in [src/config/schema.ts](agent/src/config/schema.ts). Internal code trusts `AgentConfig` as the parsed type.
-- **No package-manager mixing:** this is a pnpm project (`pnpm-lock.yaml`). Don't run `npm install` or `yarn`.
+- **No package-manager mixing:** `agent/` is pnpm (`pnpm-lock.yaml`), `app/` is npm (`package-lock.json`). Use the right one for the tree you're in; don't mix.
 
 ## Tests
 

@@ -11,7 +11,7 @@ describe('user routes', () => {
   beforeEach(async () => { await cleanCollections(tdb.db); app = await makeApp(tdb.db); });
 
   it('GET /v1/users/:username returns the public profile', async () => {
-    await registerAndLogin(app, { username: 'alice', displayName: 'Alice A' });
+    await registerAndLogin(app, { username: 'alice', displayName: 'Alice A' }, tdb.db);
     const r = await jsonReq(app, 'GET', '/v1/users/alice');
     expect(r.status).toBe(200);
     expect(r.body.user.username).toBe('alice');
@@ -29,19 +29,13 @@ describe('user routes', () => {
     expect(r.body.user.bio).toBe('hi');
   });
 
-  it('PATCH /v1/auth/me/password requires the current password', async () => {
-    const me = await registerAndLogin(app, { username: 'carol', password: 'old-password-12' });
+  it('PATCH /v1/auth/me/password is a no-op for Privy users (passwordHash is null)', async () => {
+    // Privy users have no passwordHash; the password-change route returns 401 for them.
+    const me = await registerAndLogin(app, { username: 'carol' });
     const bad = await jsonReq(app, 'PATCH', '/v1/auth/me/password',
       { currentPassword: 'wrong', newPassword: 'new-password-12' }, me.token);
+    // passwordHash is null on Privy-provisioned users — route rejects with 401.
     expect(bad.status).toBe(401);
-
-    const ok = await jsonReq(app, 'PATCH', '/v1/auth/me/password',
-      { currentPassword: 'old-password-12', newPassword: 'new-password-12' }, me.token);
-    expect(ok.status).toBe(200);
-
-    const login = await jsonReq(app, 'POST', '/v1/auth/login',
-      { emailOrUsername: 'carol', password: 'new-password-12' });
-    expect(login.status).toBe(200);
   });
 
   it('GET /v1/users/:username 404s for unknown user', async () => {

@@ -55,3 +55,22 @@ web/build
 agent/bun.lock
 app/bun.lock
 /docs
+/.playwright-mcp
+/app/.playwright-mcp
+*.png
+
+# Orchestration scratch files (dep-batching during multi-agent dev)
+backend/.pending-deps.json
+backend/.storage-mock/
+
+# Playwright + drive artifacts
+/app/page-*.yml
+/tmp/pw-test/
+
+# Local-only Claude settings
+/.claude/settings.json
+
+# Contract build artifacts (committed: abi/ + deployments/)
+contracts/cache/
+contracts/artifacts/
+contracts/typechain-types/

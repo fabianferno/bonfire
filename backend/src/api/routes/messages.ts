@@ -27,6 +27,7 @@ export interface MessageRouteDeps {
   db: Db;
   jwtSecret: string;
   cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number };
+  inftDeps?: import('../../agents/invoker.js').InftDeps;
 }
 
 export function messageRoutes(deps: MessageRouteDeps) {
@@ -61,13 +62,19 @@ export function messageRoutes(deps: MessageRouteDeps) {
     // Fetch the server once so both paths can pass the wallet key as envOverride.
     const server = await deps.db.collection<ServerDoc>(collections.servers).findOne({ _id: channel.serverId });
 
+    const serverWallet = server?.wallet?.address;
+
     if (parsed.data.stream) {
       // Streaming path remains single-hop in v1.
       const agents = await computeInvocationSet({ db: deps.db, channel, userMessage });
       const envOverride = server?.wallet?.privateKey
         ? { DEPLOYER_PRIVATE_KEY: server.wallet.privateKey }
         : undefined;
-      const handles = await startStreamingInvocation({ db: deps.db, channel, userMessage }, agents, envOverride);
+      const handles = await startStreamingInvocation(
+        { db: deps.db, channel, userMessage, inftDeps: deps.inftDeps, serverWallet },
+        agents,
+        envOverride,
+      );
       return c.json({
         userMessage: publicMessage(userMsgWithMeta as any),
         replies: [],
@@ -81,6 +88,7 @@ export function messageRoutes(deps: MessageRouteDeps) {
       rootMessage: userMsgWithMeta as any,
       config: deps.cascadeConfig,
       server: server ?? undefined,
+      inftDeps: deps.inftDeps,
     });
     return c.json({
       userMessage: publicMessage(userMsgWithMeta as any),

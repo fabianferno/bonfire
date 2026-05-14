@@ -5,13 +5,17 @@ export async function createIndexes(db: Db): Promise<void> {
   const ci = { locale: 'en', strength: 2 } as const;
 
   await db.collection(collections.users).createIndexes([
-    { key: { email: 1 }, name: 'email_1', unique: true, collation: ci },
+    { key: { email: 1 }, name: 'email_1', unique: true, collation: ci, sparse: true },
     { key: { username: 1 }, name: 'username_1', unique: true, collation: ci },
+    { key: { privyDid: 1 }, name: 'privyDid_1', unique: true },
+    { key: { walletAddress: 1 }, name: 'walletAddress_1', unique: true, sparse: true },
   ]);
 
   await db.collection(collections.agents).createIndexes([
     { key: { slug: 1 }, name: 'slug_1', unique: true, collation: ci },
     { key: { visibility: 1, tags: 1 }, name: 'visibility_1_tags_1' },
+    { key: { tokenId: 1 }, name: 'tokenId_1', unique: true, sparse: true },
+    { key: { ownerWallet: 1 }, name: 'ownerWallet_1' },
   ]);
 
   await db.collection(collections.servers).createIndexes([
@@ -33,5 +37,12 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { channelId: 1, createdAt: -1 }, name: 'channelId_1_createdAt_-1' },
     { key: { serverId: 1, createdAt: -1 }, name: 'serverId_1_createdAt_-1' },
     { key: { cascadeRootId: 1, createdAt: 1 }, name: 'cascadeRootId_1_createdAt_1' },
+  ]);
+
+  await db.collection(collections.mintReservations).createIndexes([
+    { key: { reservedId: 1 }, name: 'reservedId_1', unique: true },
+    { key: { userId: 1 }, name: 'userId_1' },
+    { key: { slug: 1 }, name: 'slug_1', unique: true, sparse: true },
+    { key: { expiresAt: 1 }, name: 'expiresAt_1', expireAfterSeconds: 0 },
   ]);
 }

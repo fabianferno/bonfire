@@ -1,14 +1,111 @@
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
+import { LRUCache } from 'lru-cache';
 import { collections } from '../db/types.js';
 import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc, ServerDoc } from '../db/types.js';
 import { findAgentByIdOrSlug } from './registry.js';
 import { findUserById } from '../users/service.js';
-import { invokeAgent, openAgentStream } from './client.js';
+import { invokeAgent, openAgentStream, type TenantPayload } from './client.js';
 import { insertMessage } from '../messages/service.js';
 import { log } from '../util/logger.js';
 import { registerStream } from '../messages/stream-registry.js';
 import { resolveMentions } from '../messages/mentions.js';
+import type { InftChain } from '../chain/inft.js';
+import type { OgStorageClient } from '../storage-0g/index.js';
+import { decryptAgentBundle } from './inft-decrypt.js';
+
+// ---------------------------------------------------------------------------
+// INFT authorization gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependencies injected by the caller for on-chain authorization and bundle decryption.
+ * All three fields must be present to enable the INFT invocation path.
+ */
+export interface InftDeps {
+  /** On-chain client used to read isAuthorized() and agentOf(). */
+  inft: InftChain;
+  /** 0G Storage client used to fetch encryptedBundle and sealedDEK. */
+  storage: OgStorageClient;
+  /** Hex private key of the platform-executor wallet (ECIES decryption). */
+  platformExecutorPrivkey: string;
+}
+
+/**
+ * LRU cache for on-chain authorization results.
+ * Key: "<tokenId>:<serverWallet-lowercase>"; TTL: 60 seconds.
+ * A 60-second window is acceptable — revocations are low-frequency and the
+ * cache prevents thundering-herd on chain reads during burst invocations.
+ */
+const authCache = new LRUCache<string, boolean>({ max: 5000, ttl: 60_000 });
+
+/**
+ * Determine whether an invocation should be allowed for a given agent + server wallet.
+ *
+ * Rules:
+ *  - Legacy agents (no tokenId) → always allowed.
+ *  - Public-mode INFT agents    → always allowed (no authorization check needed).
+ *  - Permissioned INFT agents   → check isAuthorized(tokenId, serverWallet) on-chain,
+ *                                  with a 60-second LRU cache.
+ *
+ * @param agent        - The AgentDoc being invoked
+ * @param serverWallet - The server's 0G wallet address (executor)
+ * @param deps         - INFT chain + storage deps
+ * @returns true if invocation is permitted, false otherwise
+ */
+export async function isInvocationAllowed(
+  agent: AgentDoc,
+  serverWallet: string,
+  deps: InftDeps,
+): Promise<boolean> {
+  // Legacy non-INFT agents — always allowed
+  if (!agent.tokenId) return true;
+  // Public-mode agents are open to all servers — no chain read needed
+  if (agent.mode === 'public') return true;
+
+  const k = `${agent.tokenId}:${serverWallet.toLowerCase()}`;
+  const cached = authCache.get(k);
+  if (cached !== undefined) return cached;
+
+  const allowed = await deps.inft.isAuthorized(BigInt(agent.tokenId), serverWallet);
+  authCache.set(k, allowed);
+  return allowed;
+}
+
+/**
+ * Decrypt the INFT bundle and merge it with the agent's public identity fields to
+ * produce a TenantPayload for inline delivery to the ember-agent runtime.
+ *
+ * Only valid for INFT-backed agents (tokenId present). Throws for legacy agents.
+ *
+ * @param agent - AgentDoc with chain references
+ * @param deps  - INFT deps
+ * @returns TenantPayload ready to pass as tenantInline to openAgentStream / invokeAgent
+ * @throws Error if the agent has no tokenId
+ */
+export async function buildInlineTenant(
+  agent: AgentDoc,
+  deps: InftDeps,
+): Promise<TenantPayload> {
+  if (!agent.tokenId) {
+    // Caller should fall back to slug-based registry lookup in the agent runtime
+    throw new Error('not an INFT agent — no inline tenant');
+  }
+  const bundle = await decryptAgentBundle({
+    agent,
+    storage: deps.storage,
+    platformExecutorPrivkey: deps.platformExecutorPrivkey,
+  });
+  return { slug: agent.slug, name: agent.name, ...bundle };
+}
+
+/**
+ * Invalidate the authorization cache for a specific (tokenId, serverWallet) pair.
+ * Call this after a UsageRevoked or ModeChanged chain event is observed by the indexer.
+ */
+export function invalidateAuthCache(tokenId: string, serverWallet: string): void {
+  authCache.delete(`${tokenId}:${serverWallet.toLowerCase()}`);
+}
 
 export function chatIdForChannel(channelId: ObjectId): string {
   return `bonfire:channel:${channelId.toHexString()}`;
@@ -18,6 +115,10 @@ export interface InvocationContext {
   db: Db;
   channel: ChannelDoc;
   userMessage: MessageDoc;
+  /** Present when this invocation can resolve INFT-backed agents. */
+  inftDeps?: InftDeps;
+  /** Server wallet address used as the executor for on-chain authorization checks. */
+  serverWallet?: string;
 }
 
 export async function computeInvocationSet(ctx: InvocationContext): Promise<AgentDoc[]> {
@@ -54,8 +155,30 @@ export async function startStreamingInvocation(
   const chatId = chatIdForChannel(ctx.channel._id);
   for (const agent of agents) {
     try {
+      // INFT gate + bundle decrypt (streaming path)
+      let tenantInline: TenantPayload | undefined;
+      if (ctx.inftDeps && agent.tokenId) {
+        const wallet = ctx.serverWallet ?? '';
+        const allowed = await isInvocationAllowed(agent, wallet, ctx.inftDeps);
+        if (!allowed) {
+          log.warn({ agentSlug: agent.slug, serverWallet: wallet }, 'streaming invocation denied — no on-chain authorization');
+          continue;
+        }
+        try {
+          tenantInline = await buildInlineTenant(agent, ctx.inftDeps);
+        } catch (decryptErr) {
+          log.error({ agentSlug: agent.slug, err: decryptErr }, 'bundle decrypt failed — skipping streaming invocation');
+          continue;
+        }
+      }
+
       const { streamId, upstreamUrl } = await openAgentStream({
-        baseUrl: agent.baseUrl, chatId, text: ctx.userMessage.content, tenant: agent.slug, envOverride,
+        baseUrl: agent.baseUrl,
+        chatId,
+        text: ctx.userMessage.content,
+        tenant: tenantInline ? undefined : agent.slug,
+        tenantInline,
+        envOverride,
       });
       registerStream({
         streamId,
@@ -133,6 +256,8 @@ export interface CascadeContext {
   config?: Partial<CascadeConfig>;
   /** Server doc for the channel's server — used to derive the 0G wallet envOverride for inference. */
   server?: ServerDoc;
+  /** Present when INFT authorization gate + bundle decryption should be applied. */
+  inftDeps?: InftDeps;
 }
 
 /**
@@ -156,6 +281,7 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
   const config: CascadeConfig = { ...DEFAULT_CASCADE, ...(ctx.config ?? {}) };
   // Derive once so all hops within this cascade use the same server wallet.
   const envOverride = envOverrideFromServer(ctx.server);
+  const serverWallet = ctx.server?.wallet?.address;
 
   // cascadeEnabled === false → direct-only fallback (no follow-up of agent mentions)
   if (ctx.channel.cascadeEnabled === false) {
@@ -165,6 +291,7 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
     return runInvocationLinked({
       db: ctx.db, channel: ctx.channel, parent: ctx.rootMessage, agents: direct,
       hop: 1, rootId: ctx.rootMessage._id, envOverride,
+      inftDeps: ctx.inftDeps, serverWallet,
     });
   }
 
@@ -193,6 +320,7 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
     const replies = await runInvocationLinked({
       db: ctx.db, channel: ctx.channel, parent: next.parentMessage, agents: [next.agent],
       hop: next.hop, rootId: ctx.rootMessage._id, envOverride,
+      inftDeps: ctx.inftDeps, serverWallet,
     });
     totalInvocations++;
     out.push(...replies);
@@ -290,6 +418,10 @@ async function runInvocationLinked(args: {
   rootId: ObjectId;
   /** Per-request env overrides forwarded to the agent (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
   envOverride?: Record<string, string>;
+  /** INFT authorization + decryption deps. Present only when INFT gate is active. */
+  inftDeps?: InftDeps;
+  /** Server wallet address used as the on-chain executor for authorization checks. */
+  serverWallet?: string;
 }): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
   const chatId = chatIdForChannel(args.channel._id);
@@ -298,6 +430,23 @@ async function runInvocationLinked(args: {
   const speakerIsHuman = args.parent.authorType === 'user';
   for (const agent of args.agents) {
     try {
+      // INFT authorization gate + bundle decryption (only when inftDeps injected)
+      let tenantInline: TenantPayload | undefined;
+      if (args.inftDeps && agent.tokenId) {
+        const wallet = args.serverWallet ?? '';
+        const allowed = await isInvocationAllowed(agent, wallet, args.inftDeps);
+        if (!allowed) {
+          log.warn({ agentSlug: agent.slug, serverWallet: wallet }, 'invocation denied — no on-chain authorization');
+          continue;
+        }
+        try {
+          tenantInline = await buildInlineTenant(agent, args.inftDeps);
+        } catch (decryptErr) {
+          log.error({ agentSlug: agent.slug, err: decryptErr }, 'bundle decrypt failed — skipping invocation');
+          continue;
+        }
+      }
+
       const text = prepareInvocationText({
         parent: args.parent,
         target: agent,
@@ -310,7 +459,8 @@ async function runInvocationLinked(args: {
         baseUrl: agent.baseUrl,
         chatId,
         text,
-        tenant: agent.slug,
+        tenant: tenantInline ? undefined : agent.slug,
+        tenantInline,
         envOverride: args.envOverride,
       });
       const persisted = await insertMessage(args.db, {

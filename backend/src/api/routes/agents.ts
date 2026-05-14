@@ -2,12 +2,19 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
+import { randomBytes as nodeRandomBytes } from 'node:crypto';
+import { keccak256 } from 'ethers';
+import { v4 as uuidv4 } from 'uuid';
 import { requireUser, type AuthBindings } from '../../auth/middleware.js';
 import {
   AgentSlugTakenError, createAgent, findAgentByIdOrSlug,
   listPublicAgents, deleteAgent, publicAgent, rotateAgentKey,
 } from '../../agents/registry.js';
 import { collections } from '../../db/types.js';
+import type { AgentDoc, MintReservationDoc } from '../../db/types.js';
+import { encryptAesGcm, packEnvelope, sealEcies, pubkeyFromPrivkey } from '../../crypto/index.js';
+import { createOgStorage } from '../../storage-0g/index.js';
+import { createInftChain } from '../../chain/index.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
 
@@ -184,6 +191,243 @@ export function agentRoutes(deps: AgentRouteDeps) {
     if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
     const key = await rotateAgentKey(deps.db, a._id);
     return c.json({ agentKey: key });
+  });
+
+  // ---------------------------------------------------------------------------
+  // INFT mint flow — two-step: /mint prepares the on-chain payload, /mint/confirm
+  // links the minted token back to an AgentDoc after the frontend calls the contract.
+  // ---------------------------------------------------------------------------
+
+  /** Zod schema for POST /v1/agents/mint */
+  const MintRequestSchema = z.object({
+    slug: z.string().regex(/^[a-z0-9_-]{3,32}$/),
+    name: z.string().min(1).max(64),
+    description: z.string().min(1).max(500),
+    avatarUrl: z.string().url().nullable().optional(),
+    tags: z.array(z.string()).default([]),
+    soul: z.string().min(1).max(50000),
+    agents: z.string().min(1).max(50000),
+    llm: z.object({
+      provider: z.enum(['openai-compatible', 'zerog']).optional(),
+      baseUrl: z.string().url().optional(),
+      model: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      maxTokens: z.number().min(1).max(32000).optional(),
+    }).default({}),
+    mode: z.enum(['public', 'permissioned']).default('public'),
+  });
+
+  /** Zod schema for POST /v1/agents/mint/confirm */
+  const ConfirmRequestSchema = z.object({
+    txHash: z.string().regex(/^0x[0-9a-f]{64}$/i),
+    reservationId: z.string().uuid(),
+  });
+
+  /**
+   * POST /v1/agents/mint
+   *
+   * Encrypts the agent bundle (soul + agents + llm), uploads three blobs to 0G Storage,
+   * and returns the data the frontend needs to call BonFireAgentINFT.mint() on-chain.
+   * A MintReservationDoc is persisted to guard the slug and allow /confirm to link
+   * the resulting tokenId back to an AgentDoc.
+   *
+   * Auth required — user must have a walletAddress provisioned by Privy.
+   */
+  app.post('/v1/agents/mint', requireAuth, async (c) => {
+    const parsed = MintRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
+
+    const { slug, name, description, avatarUrl, tags, soul, agents: agentsText, llm, mode } = parsed.data;
+    const user = c.get('user');
+
+    // 1. Check slug uniqueness across agents collection
+    const existingAgent = await deps.db.collection(collections.agents).findOne({ slug });
+    if (existingAgent) return c.json({ error: 'agent_slug_taken' }, 409);
+
+    // Check no active (non-expired, non-minted) reservation claims this slug
+    const existingReservation = await deps.db
+      .collection<MintReservationDoc>(collections.mintReservations)
+      .findOne({ slug, status: 'uploaded', expiresAt: { $gt: new Date() } });
+    if (existingReservation) return c.json({ error: 'agent_slug_taken' }, 409);
+
+    // 2. Build public manifest (stored in plaintext on 0G Storage)
+    const publicManifest = { slug, name, description, avatarUrl: avatarUrl ?? null, tags, version: 1 };
+
+    // 3. Build encrypted bundle
+    const bundle = { soul, agents: agentsText, llm };
+    const bundleBuffer = Buffer.from(JSON.stringify(bundle), 'utf8');
+
+    // 4. Generate DEK (256-bit data encryption key)
+    const dek = nodeRandomBytes(32);
+
+    // 5. Encrypt bundle with AES-256-GCM
+    const encryptedEnvelope = encryptAesGcm(bundleBuffer, dek);
+    const encryptedBundle = packEnvelope(encryptedEnvelope);
+
+    // 6. Seal DEK with platform-executor public key (ECIES)
+    const platformPrivkey = process.env.PLATFORM_EXECUTOR_PRIVATE_KEY;
+    if (!platformPrivkey) {
+      return c.json({ error: 'server_misconfigured', detail: 'PLATFORM_EXECUTOR_PRIVATE_KEY not set' }, 500);
+    }
+    const platformExecutorPubkey = pubkeyFromPrivkey(platformPrivkey);
+    const sealedDEK = sealEcies(platformExecutorPubkey, dek);
+
+    // 7. Generate reservation ID (returned to frontend for use in /confirm)
+    const reservedId = uuidv4();
+
+    // 8. Upload to 0G Storage in parallel
+    const storage = createOgStorage();
+    const [manifestUri, bundleUri, sealedDEKUri] = await Promise.all([
+      storage.upload(`publicManifest/${reservedId}.json`, Buffer.from(JSON.stringify(publicManifest), 'utf8')),
+      storage.upload(`encryptedBundle/${reservedId}.bin`, encryptedBundle),
+      storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK),
+    ]);
+
+    // Derive the base URI for the sealed DEK directory (strip the filename)
+    const sealedDEKBaseUri = sealedDEKUri.replace(/\/shared\.bin$/, '');
+
+    // 9. Compute bundleHash = keccak256 of the packed encrypted bundle
+    const bundleHashHex = keccak256(encryptedBundle);
+
+    // 10. Insert MintReservationDoc — `manifest` caches public fields so /confirm can
+    // build the AgentDoc without re-fetching from 0G Storage.
+    const now = new Date();
+    const reservation: MintReservationDoc & { manifest: typeof publicManifest } = {
+      _id: new ObjectId(),
+      reservedId,
+      userId: user._id,
+      slug,
+      manifestUri,
+      bundleUri,
+      sealedDEKBaseUri,
+      bundleHash: bundleHashHex,
+      mode,
+      status: 'uploaded',
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // +24h
+      manifest: publicManifest,
+    };
+
+    try {
+      await deps.db
+        .collection<MintReservationDoc>(collections.mintReservations)
+        .insertOne(reservation as unknown as MintReservationDoc);
+    } catch (e: any) {
+      // Concurrent /mint for the same slug — Mongo's unique index on `slug`
+      // catches what the prior findOne checks raced past.
+      if (e?.code === 11000) return c.json({ error: 'agent_slug_taken' }, 409);
+      throw e;
+    }
+
+    const chainMode = mode === 'public' ? 0 : 1;
+
+    return c.json({
+      mintPayload: {
+        manifestUri,
+        bundleUri,
+        sealedDEKBaseUri,
+        bundleHash: bundleHashHex,
+        mode: chainMode,
+      },
+      reservationId: reservedId,
+      contractAddress: process.env.INFT_CONTRACT_ADDRESS ?? null,
+    });
+  });
+
+  /**
+   * POST /v1/agents/mint/confirm
+   *
+   * Called by the frontend after the on-chain mint transaction confirms.
+   * Verifies the tx receipt on-chain, checks the bundleHash and owner match
+   * the reservation, then inserts the AgentDoc and marks the reservation minted.
+   *
+   * Auth required — caller must be the address that minted the token.
+   */
+  app.post('/v1/agents/mint/confirm', requireAuth, async (c) => {
+    const parsed = ConfirmRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
+
+    const { txHash, reservationId } = parsed.data;
+    const user = c.get('user');
+
+    // 1. Load reservation
+    const reservation = await deps.db
+      .collection<MintReservationDoc & { manifest?: Record<string, unknown> }>(collections.mintReservations)
+      .findOne({ reservedId: reservationId });
+
+    if (!reservation) return c.json({ error: 'reservation_not_found' }, 410);
+    if (reservation.status !== 'uploaded') return c.json({ error: 'reservation_already_used' }, 410);
+    if (reservation.expiresAt < new Date()) return c.json({ error: 'reservation_expired' }, 410);
+
+    // 2. Verify on-chain transaction
+    let mintResult: { tokenId: bigint; owner: string; mode: number; bundleHash: string };
+    try {
+      const inft = createInftChain();
+      mintResult = await inft.verifyMintTx(txHash);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: 'chain_verification_failed', detail: msg }, 400);
+    }
+
+    // 3. Assert bundleHash matches (case-insensitive hex comparison)
+    if (mintResult.bundleHash.toLowerCase() !== reservation.bundleHash.toLowerCase()) {
+      return c.json({ error: 'bundle_hash_mismatch' }, 400);
+    }
+
+    // 4. Assert the caller is the minter (anti-front-run check)
+    if (!user.walletAddress || mintResult.owner.toLowerCase() !== user.walletAddress.toLowerCase()) {
+      return c.json({ error: 'owner_mismatch' }, 403);
+    }
+
+    // 5. Build and insert AgentDoc
+    const m = reservation.manifest as { name?: string; description?: string; avatarUrl?: string | null; tags?: string[] } | undefined;
+    const now = new Date();
+    const agentDoc: AgentDoc = {
+      _id: new ObjectId(),
+      name: m?.name ?? reservation.slug,
+      slug: reservation.slug,
+      avatarUrl: m?.avatarUrl ?? null,
+      description: m?.description ?? '',
+      bio: null,
+      tags: m?.tags ?? [],
+      baseUrl: process.env.EMBER_AGENT_BASE_URL ?? 'http://localhost:7777',
+      visibility: 'public',
+      agentKeyHash: null,
+      createdBy: user._id,
+      createdAt: now,
+      updatedAt: now,
+      // INFT chain pointers
+      tokenId: mintResult.tokenId.toString(),
+      contractAddress: process.env.INFT_CONTRACT_ADDRESS ?? undefined,
+      ownerWallet: mintResult.owner,
+      mode: mintResult.mode === 0 ? 'public' : 'permissioned',
+      manifestUri: reservation.manifestUri,
+      bundleUri: reservation.bundleUri,
+      sealedDEKBaseUri: reservation.sealedDEKBaseUri,
+      bundleHash: reservation.bundleHash,
+    };
+
+    // Idempotent upsert by tokenId — the chain indexer may have inserted this
+    // AgentDoc first if /confirm races with the AgentMinted event. Either path
+    // produces the same final document; whichever arrives first wins.
+    try {
+      await deps.db.collection<AgentDoc>(collections.agents).updateOne(
+        { tokenId: agentDoc.tokenId },
+        { $setOnInsert: agentDoc },
+        { upsert: true },
+      );
+    } catch (e: unknown) {
+      const code = (e as Record<string, unknown>)?.code;
+      if (code === 11000) return c.json({ error: 'agent_slug_taken' }, 409);
+      throw e;
+    }
+
+    // 6. Mark reservation as minted
+    await deps.db
+      .collection<MintReservationDoc>(collections.mintReservations)
+      .updateOne({ reservedId: reservationId }, { $set: { status: 'minted' } });
+
+    return c.json({ agent: publicAgent(agentDoc) });
   });
 
   return app;

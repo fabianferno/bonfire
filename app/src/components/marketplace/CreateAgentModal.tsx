@@ -1,18 +1,39 @@
 'use client';
+
+/**
+ * Multi-step "Create Agent" modal that mints a BonFire INFT via the user's
+ * Privy embedded wallet on 0G testnet.
+ *
+ * Flow:
+ *   1. User fills the form and submits.
+ *   2. `POST /v1/agents/mint` — backend encrypts, uploads to 0G Storage, and
+ *      returns `{mintPayload, reservationId, contractAddress}`.
+ *   3. Privy `sendTransaction` — user signs; we get `txHash`.
+ *   4. `POST /v1/agents/mint/confirm` — backend verifies on-chain, writes AgentDoc.
+ *   5. Success state shown briefly, then modal closes.
+ */
+
 import { useState } from 'react';
-import { bf } from '@/lib/api-bonfire';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { useMintAgent } from '@/lib/inft';
+import { api } from '@/lib/api';
 import { ApiError } from '@/lib/api';
-import { AGENT_BASE_URL } from '@/lib/config';
 import type { BackendAgent } from '@/lib/types';
 import Modal, { ModalLabel, ModalInput, ModalTextarea } from '@/components/shared/Modal';
+import { MintProgress, type MintStep } from './MintProgress';
+import type { MintPayload } from '@/lib/inft';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface Props {
   onClose: () => void;
-  /** Called when creation succeeds, after the modal closes. */
-  onCreated: () => void;
+  /** Called with the newly created agent after the modal closes. */
+  onCreated?: (agent: BackendAgent) => void;
 }
 
-type Step = 'form' | 'success';
+type WizardStep = 'form' | MintStep;
 
 interface FormFields {
   slug: string;
@@ -23,6 +44,11 @@ interface FormFields {
   visibility: 'public' | 'unlisted';
   soul: string;
   agents: string;
+  llmProvider: 'openai-compatible' | 'zerog';
+  llmModel: string;
+  llmTemperature: string;
+  llmMaxTokens: string;
+  mode: 0 | 1;
 }
 
 interface FieldErrors {
@@ -33,9 +59,12 @@ interface FieldErrors {
   soul?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
 const SLUG_RE = /^[a-z0-9_-]{3,32}$/;
 
-/** Returns true if the given string is a syntactically valid URL. */
 function isValidUrl(s: string): boolean {
   try {
     new URL(s);
@@ -47,7 +76,6 @@ function isValidUrl(s: string): boolean {
 
 function validate(f: FormFields): FieldErrors {
   const errs: FieldErrors = {};
-
   if (!SLUG_RE.test(f.slug)) {
     errs.slug =
       'Slug must be 3–32 characters: lowercase letters, numbers, dashes, or underscores.';
@@ -64,13 +92,20 @@ function validate(f: FormFields): FieldErrors {
   if (!f.soul.trim()) {
     errs.soul = "SOUL is required — describe the agent's personality.";
   }
-
   return errs;
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function CreateAgentModal({ onClose, onCreated }: Props) {
-  const [step, setStep] = useState<Step>('form');
+  const { user } = useAuth();
+  const { mint } = useMintAgent();
+
+  const [step, setStep] = useState<WizardStep>('form');
+  const [mintError, setMintError] = useState<string | null>(null);
+
   const [fields, setFields] = useState<FormFields>({
     slug: '',
     name: '',
@@ -80,166 +115,204 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     visibility: 'public',
     soul: '',
     agents: '',
+    llmProvider: 'openai-compatible',
+    llmModel: '',
+    llmTemperature: '0.7',
+    llmMaxTokens: '1024',
+    mode: 0,
   });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ agent: BackendAgent; agentKey: string } | null>(
-    null,
-  );
-  const [copied, setCopied] = useState(false);
 
-  const set = (key: keyof FormFields) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  ) => {
-    setFields((prev) => ({ ...prev, [key]: e.target.value }));
-    // Clear field-level error on change
-    if (fieldErrors[key as keyof FieldErrors]) {
-      setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
-    }
-  };
+  // Generic field updater that also clears the field-level error on change.
+  const set =
+    (key: keyof FormFields) =>
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      >,
+    ) => {
+      setFields((prev) => ({ ...prev, [key]: e.target.value }));
+      if (key in fieldErrors) {
+        setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+      }
+    };
 
+  // ------------------------------------------------------------------
+  // Mint submit handler
+  // ------------------------------------------------------------------
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setMintError(null);
 
     const errs = validate(fields);
-
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       return;
     }
 
+    if (!user?.walletAddress) {
+      // Wallet banner handles this — just guard here.
+      return;
+    }
+
     setSubmitting(true);
     try {
+      // ---- Step 1: backend prepares manifests + encrypted bundle ----
+      setStep('preparing');
+
       const tags = fields.tags
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean);
 
-      const body: Record<string, unknown> = {
+      const llmTemp = parseFloat(fields.llmTemperature);
+      const llmMax = parseInt(fields.llmMaxTokens, 10);
+
+      const prepareBody = {
         slug: fields.slug,
         name: fields.name.trim(),
         description: fields.description.trim(),
-        baseUrl: AGENT_BASE_URL,
+        avatarUrl: fields.avatarUrl.trim() || undefined,
+        tags: tags.length > 0 ? tags : undefined,
         visibility: fields.visibility,
-        soul: fields.soul.trim() || undefined,
+        soul: fields.soul.trim(),
         agents: fields.agents.trim() || undefined,
-        ...(tags.length > 0 && { tags }),
-        ...(fields.avatarUrl && { avatarUrl: fields.avatarUrl.trim() }),
+        llm: {
+          provider: fields.llmProvider,
+          model: fields.llmModel.trim() || undefined,
+          temperature: Number.isFinite(llmTemp) ? llmTemp : 0.7,
+          maxTokens: Number.isFinite(llmMax) ? llmMax : 1024,
+        },
+        mode: fields.mode,
       };
 
-      const data = await bf.createAgent(body as Parameters<typeof bf.createAgent>[0]);
+      // POST /v1/agents/mint — backend encrypts, uploads to 0G Storage, returns
+      // the parameters the frontend must pass to the smart contract.
+      const prepareResult = await api<{
+        mintPayload: MintPayload;
+        reservationId: string;
+        contractAddress: string;
+      }>('POST', '/v1/agents/mint', prepareBody);
 
-      setResult(data);
-      setStep('success');
+      const { mintPayload, reservationId, contractAddress } = prepareResult;
+
+      // ---- Step 2: user signs the mint transaction via Privy ----
+      setStep('signing');
+
+      let txHash: `0x${string}`;
+      try {
+        const result = await mint({ payload: mintPayload, contractAddress });
+        txHash = result.txHash;
+      } catch (signingErr: unknown) {
+        // Distinguish user-rejection from unexpected errors so we can show a
+        // helpful "you rejected" message rather than a generic failure.
+        const msg =
+          signingErr instanceof Error ? signingErr.message : String(signingErr);
+        const isRejection =
+          /rejected|denied|cancel/i.test(msg) ||
+          (signingErr as { code?: number })?.code === 4001;
+
+        setMintError(
+          isRejection ? 'You rejected the transaction. Retry?' : msg,
+        );
+        setStep('error');
+        setSubmitting(false);
+        return;
+      }
+
+      // ---- Step 3: backend verifies receipt and creates AgentDoc ----
+      setStep('confirming');
+
+      const confirmResult = await api<{ agent: BackendAgent }>(
+        'POST',
+        '/v1/agents/mint/confirm',
+        { txHash, reservationId },
+      );
+
+      setStep('done');
+      onCreated?.(confirmResult.agent);
+      setTimeout(onClose, 1400);
     } catch (err: unknown) {
+      let msg = 'Mint failed. Please try again.';
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setError('That slug is already taken in the marketplace.');
-        } else if (err.status === 502) {
-          setError(
-            'Agent server unreachable. Is the ember-agent running on port 7777?',
-          );
-        } else {
-          setError(err.message);
+          // Slug conflict — surface inline on the slug field and return to form.
+          setFieldErrors((prev) => ({
+            ...prev,
+            slug: 'That slug is already taken in the marketplace.',
+          }));
+          setStep('form');
+          setSubmitting(false);
+          return;
         }
-      } else {
-        setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+        msg = err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
       }
+      setMintError(msg);
+      setStep('error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleCopy = async () => {
-    if (!result?.agentKey) return;
-    try {
-      await navigator.clipboard.writeText(result.agentKey);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard API unavailable — silently ignore
-    }
+  // Allow retrying after an error by going back to the form.
+  const handleRetry = () => {
+    setMintError(null);
+    setStep('form');
   };
 
-  const handleClose = () => {
-    if (step === 'success') {
-      onCreated();
-    } else {
-      onClose();
-    }
-  };
+  // ------------------------------------------------------------------
+  // Wallet-not-ready banner
+  // ------------------------------------------------------------------
+  const walletMissing = !user?.walletAddress;
 
-  if (step === 'success' && result) {
+  // ------------------------------------------------------------------
+  // Render: non-form steps
+  // ------------------------------------------------------------------
+  if (step !== 'form') {
     return (
-      <Modal title="Agent Created" onClose={handleClose} wide maxHeight="80vh">
-        <div className="flex flex-col gap-5">
-          {/* Success heading */}
-          <p className="text-lg font-semibold text-emerald-300">
-            ✓ Created @{result.agent.slug}
-          </p>
-
-          {/* Agent key display */}
-          <div>
-            <p className="text-sm mb-2" style={{ color: 'var(--bf-gray)' }}>
-              Your agent key (save this — it won&apos;t be shown again):
-            </p>
-            <div className="flex items-center gap-2">
-              <code
-                className="flex-1 block rounded px-3 py-2.5 text-sm font-mono break-all"
-                style={{
-                  background: 'var(--bf-tertiary)',
-                  color: 'var(--bf-white)',
-                  border: '1px solid var(--bf-quinary)',
-                }}
-              >
-                {result.agentKey}
-              </code>
-              <button
-                onClick={handleCopy}
-                className="flex-shrink-0 px-3 py-2 rounded text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ background: 'var(--bf-fire)', color: 'var(--bf-white)' }}
-              >
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          </div>
-
-          {/* Next steps */}
-          <div>
-            <p className="text-sm font-semibold text-white mb-1">Next steps:</p>
-            <ul className="list-disc list-inside text-sm space-y-1" style={{ color: 'var(--bf-gray)' }}>
-              <li>
-                Invite <span className="text-white">@{result.agent.slug}</span> to one of
-                your servers
-              </li>
-              <li>
-                Test it by @-mentioning in a channel
-              </li>
-            </ul>
-          </div>
-
-          {/* Done button */}
-          <div className="flex justify-end">
+      <Modal title="Create Agent" onClose={onClose} wide maxHeight="80vh">
+        <MintProgress step={step as MintStep} error={mintError} />
+        {step === 'error' && (
+          <div className="flex justify-end mt-4">
             <button
-              onClick={handleClose}
+              onClick={handleRetry}
               className="px-5 py-2 rounded text-sm font-semibold transition-opacity hover:opacity-90"
               style={{ background: 'var(--bf-fire)', color: 'var(--bf-white)' }}
             >
-              Done
+              Back to form
             </button>
           </div>
-        </div>
+        )}
       </Modal>
     );
   }
 
+  // ------------------------------------------------------------------
+  // Render: form
+  // ------------------------------------------------------------------
   return (
     <Modal title="Create Agent" onClose={onClose} wide maxHeight="80vh">
+      {/* Wallet-not-ready banner */}
+      {walletMissing && (
+        <div
+          className="rounded p-3 text-sm mb-2"
+          style={{
+            background: 'rgba(251,191,36,0.12)',
+            border: '1px solid rgba(251,191,36,0.4)',
+            color: '#fbbf24',
+          }}
+        >
+          Your wallet isn&apos;t ready yet. Click Privy&apos;s account button to
+          provision an embedded wallet, then retry.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        {/* Two-column layout on desktop */}
+        {/* ── Two-column identity fields ───────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Slug */}
           <div>
@@ -338,7 +411,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               autoComplete="off"
             />
             <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
-              e.g. research, code, writing
+              Comma-separated (e.g. research, code, writing)
             </p>
           </div>
 
@@ -353,9 +426,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
                     name="visibility"
                     value={v}
                     checked={fields.visibility === v}
-                    onChange={() =>
-                      setFields((prev) => ({ ...prev, visibility: v }))
-                    }
+                    onChange={() => setFields((prev) => ({ ...prev, visibility: v }))}
                     className="accent-[var(--bf-fire)]"
                   />
                   <span className="text-sm capitalize text-white">{v}</span>
@@ -363,18 +434,64 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               ))}
             </div>
           </div>
+
+          {/* Mode (Public / Permissioned) */}
+          <div>
+            <ModalLabel>Invocation mode</ModalLabel>
+            <div className="flex gap-4 mt-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="0"
+                  checked={fields.mode === 0}
+                  onChange={() => setFields((prev) => ({ ...prev, mode: 0 }))}
+                  className="accent-[var(--bf-fire)]"
+                />
+                <div>
+                  <span className="text-sm text-white">Public</span>
+                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
+                    Anyone can invoke
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="1"
+                  checked={fields.mode === 1}
+                  onChange={() => setFields((prev) => ({ ...prev, mode: 1 }))}
+                  className="accent-[var(--bf-fire)]"
+                />
+                <div>
+                  <span className="text-sm text-white">Permissioned</span>
+                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
+                    You authorize each server
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
 
-        {/* SOUL */}
+        {/* ── SOUL ───────────────────────────────────────────────────── */}
         <div>
           <ModalLabel>
             SOUL <span style={{ color: 'var(--bf-fire)' }}>*</span>
           </ModalLabel>
           <ModalTextarea
-            rows={8}
+            rows={10}
             value={fields.soul}
             onChange={set('soul')}
-            placeholder={"You are X. You speak like…"}
+            placeholder={
+              'You are an expert research assistant called Ember.\n' +
+              'You speak concisely and cite sources when possible.\n' +
+              'You never make up facts — if unsure, say so.\n' +
+              '\n' +
+              'Tip: write in second person ("You are…"). The more specific,\n' +
+              'the more consistent the agent behaves.'
+            }
           />
           {fieldErrors.soul && (
             <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm mt-1">
@@ -383,23 +500,96 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           )}
         </div>
 
-        {/* AGENTS / Operating rules */}
+        {/* ── AGENTS / Operating rules ─────────────────────────────── */}
         <div>
           <ModalLabel>AGENTS (operating rules)</ModalLabel>
           <ModalTextarea
-            rows={5}
+            rows={6}
             value={fields.agents}
             onChange={set('agents')}
-            placeholder={"Operating rules:\n- Confirm before destructive actions.\n- Don't mention other agents unless asked."}
+            placeholder={
+              'Operating rules:\n' +
+              '- Always confirm before running destructive commands.\n' +
+              "- Don't mention other agents unless explicitly asked.\n" +
+              '- Respond in the same language the user writes in.'
+            }
           />
+          <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+            Hard constraints your agent must always follow.
+          </p>
         </div>
 
-        {/* Global error */}
-        {error && (
-          <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm">{error}</p>
-        )}
+        {/* ── LLM settings ─────────────────────────────────────────── */}
+        <div>
+          <p
+            className="text-xs font-semibold uppercase tracking-wider mb-3"
+            style={{ color: 'var(--bf-gray)' }}
+          >
+            LLM settings
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Provider */}
+            <div>
+              <ModalLabel>Provider</ModalLabel>
+              <select
+                value={fields.llmProvider}
+                onChange={set('llmProvider')}
+                className="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--bf-accent)]"
+                style={{ background: 'var(--bf-quaternary)', border: '1px solid transparent' }}
+              >
+                <option value="openai-compatible">OpenAI-compatible</option>
+                <option value="zerog">0G Compute</option>
+              </select>
+            </div>
 
-        {/* Submit */}
+            {/* Model */}
+            <div>
+              <ModalLabel>Model</ModalLabel>
+              <ModalInput
+                type="text"
+                value={fields.llmModel}
+                onChange={set('llmModel')}
+                placeholder={
+                  fields.llmProvider === 'zerog' ? 'auto (broker selects)' : 'gpt-4o-mini'
+                }
+                autoComplete="off"
+              />
+            </div>
+
+            {/* Temperature */}
+            <div>
+              <ModalLabel>Temperature</ModalLabel>
+              <ModalInput
+                type="number"
+                value={fields.llmTemperature}
+                onChange={set('llmTemperature')}
+                min={0}
+                max={2}
+                step={0.1}
+                placeholder="0.7"
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+                0 = deterministic · 2 = very creative
+              </p>
+            </div>
+
+            {/* Max tokens */}
+            <div>
+              <ModalLabel>Max tokens</ModalLabel>
+              <ModalInput
+                type="number"
+                value={fields.llmMaxTokens}
+                onChange={set('llmMaxTokens')}
+                min={64}
+                max={32768}
+                step={64}
+                placeholder="1024"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Actions ──────────────────────────────────────────────── */}
         <div className="flex justify-end gap-3 mt-2">
           <button
             type="button"
@@ -410,11 +600,11 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || walletMissing}
             className="px-5 py-2 rounded text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-default"
             style={{ background: 'var(--bf-fire)', color: 'var(--bf-white)' }}
           >
-            {submitting ? 'Creating…' : 'Create Agent'}
+            {submitting ? 'Minting…' : 'Mint Agent'}
           </button>
         </div>
       </form>

@@ -1,116 +1,113 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, ApiError } from '@/lib/api';
-import { getToken, setToken, clearToken } from '@/lib/auth';
+import React, { createContext, useContext, useEffect } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+import { setAccessTokenProvider } from '@/lib/api';
 
+/** Shape of a resolved BonFire user. */
 export interface AuthUser {
+  /** Privy decentralised identifier (privyDid). */
   id: string;
   username: string;
   email: string;
+  /** Privy embedded-wallet address, if one has been created for this user. */
+  walletAddress: string | null;
   displayName: string;
   avatarUrl: string | null;
-  bio: string | null;
 }
 
 export type AuthStatus = 'unknown' | 'authenticated' | 'guest';
 
 export interface AuthState {
   user: AuthUser | null;
+  /** @deprecated Use isAuthenticated. Kept for backward compatibility. */
   token: string | null;
   status: AuthStatus;
-  login: (emailOrUsername: string, password: string) => Promise<void>;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  login: () => void;
+  logout: () => Promise<void>;
+  /** Returns the current Privy access token or null if unauthenticated. */
+  getAccessToken: () => Promise<string | null>;
+  /** @deprecated No-op — email/password register is replaced by Privy. Kept so legacy callers compile. */
   register: (input: {
     email: string;
     username: string;
     password: string;
     displayName: string;
   }) => Promise<void>;
-  logout: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 
-interface AuthLoginResponse {
-  token: string;
-  user: AuthUser;
-}
+/** Builds an AuthUser from Privy user claims. */
+function buildUser(privyUser: NonNullable<ReturnType<typeof usePrivy>['user']>): AuthUser {
+  const emailAddress = privyUser.email?.address ?? '';
 
-interface AuthMeResponse {
-  user: AuthUser;
+  const username = emailAddress ? emailAddress.split('@')[0] : privyUser.id;
+  const displayName = username;
+
+  const wallet = privyUser.wallet?.address ?? null;
+
+  return {
+    id: privyUser.id,
+    email: emailAddress,
+    username,
+    displayName,
+    walletAddress: wallet,
+    avatarUrl: null,
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  // Start identical on server and client to avoid hydration mismatch.
-  // The real token (from localStorage) is loaded in useEffect, post-hydration.
-  const [token, setTokenState] = useState<string | null>(null);
-  const [status, setStatus] = useState<AuthStatus>('unknown');
+  const { ready, authenticated, user, login, logout, getAccessToken } = usePrivy();
 
-  // On mount (client only): read token, attempt /me, settle into authenticated/guest.
+  // Wire the Privy token provider into the api module so every api() call
+  // automatically attaches the correct Authorization header without needing
+  // to read localStorage.
   useEffect(() => {
-    const t = getToken();
-    if (!t) { setStatus('guest'); return; }
-    setTokenState(t);
+    setAccessTokenProvider(async () => {
+      if (!authenticated) return null;
+      try {
+        return await getAccessToken();
+      } catch {
+        return null;
+      }
+    });
+  }, [authenticated, getAccessToken]);
 
-    api<AuthMeResponse>('GET', '/v1/auth/me')
-      .then(({ user: me }) => {
-        setUser(me);
-        setStatus('authenticated');
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          clearToken();
-          setTokenState(null);
-        }
-        // Non-401 errors: keep the token so a retry could work.
-        setStatus('guest');
-      });
-  }, []);
+  const resolvedUser = authenticated && user ? buildUser(user) : null;
 
-  const login = useCallback(async (emailOrUsername: string, password: string) => {
-    const { token: t, user: u } = await api<AuthLoginResponse>(
-      'POST',
-      '/v1/auth/login',
-      { emailOrUsername, password },
-      { auth: false },
-    );
-    setToken(t);
-    setTokenState(t);
-    setUser(u);
-    setStatus('authenticated');
-  }, []);
+  const isLoading = !ready;
+  const isAuthenticated = ready && authenticated;
+  const status: AuthStatus = !ready ? 'unknown' : authenticated ? 'authenticated' : 'guest';
 
-  const register = useCallback(
-    async (input: {
-      email: string;
-      username: string;
-      password: string;
-      displayName: string;
-    }) => {
-      const { token: t, user: u } = await api<AuthLoginResponse>(
-        'POST',
-        '/v1/auth/register',
-        input,
-        { auth: false },
-      );
-      setToken(t);
-      setTokenState(t);
-      setUser(u);
-      setStatus('authenticated');
+  const value: AuthState = {
+    user: resolvedUser,
+    // token kept for any legacy read but always null — consumers should call getAccessToken()
+    token: null,
+    status,
+    isAuthenticated,
+    isLoading,
+    login,
+    logout,
+    getAccessToken: async () => {
+      if (!authenticated) return null;
+      try {
+        return await getAccessToken();
+      } catch {
+        return null;
+      }
     },
-    [],
-  );
-
-  const logout = useCallback(() => {
-    clearToken();
-    setTokenState(null);
-    setUser(null);
-    setStatus('guest');
-  }, []);
+    register: async () => {
+      // No-op: email/password registration is replaced by Privy.
+      // Calling login() opens the Privy modal which handles sign-up too.
+      login();
+    },
+  };
 
   return (
-    <AuthContext.Provider value={{ user, token, status, login, register, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

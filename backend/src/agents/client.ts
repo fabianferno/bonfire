@@ -1,9 +1,34 @@
+/**
+ * Inline tenant payload — carries the decrypted INFT bundle directly to the agent
+ * runtime so it can skip the slug-based registry lookup.
+ */
+export interface TenantPayload {
+  slug: string;
+  name: string;
+  soul: string;
+  agents: string;
+  llm: {
+    provider?: 'openai-compatible' | 'zerog';
+    baseUrl?: string;
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    apiKeyEnv?: string;
+  };
+}
+
 export interface InvokeAgentInput {
   baseUrl: string;
   chatId: string;
   text: string;
-  /** Tenant slug — routes to a named personality on the agent. */
+  /** Tenant slug — routes to a named personality on the agent (legacy path). */
   tenant?: string;
+  /**
+   * Inline tenant payload (INFT path).
+   * When provided, takes precedence over `tenant`; the agent runtime uses it
+   * directly and skips registry lookup.
+   */
+  tenantInline?: TenantPayload;
   /** Per-request env overrides forwarded to the agent runtime (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
   envOverride?: Record<string, string>;
   /** Abort signal for upstream call. */
@@ -12,7 +37,12 @@ export interface InvokeAgentInput {
 
 export async function invokeAgent(input: InvokeAgentInput): Promise<string> {
   const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
-  if (input.tenant) body.tenant = input.tenant;
+  if (input.tenantInline) {
+    // Inline tenant takes precedence — agent runtime detects object vs string
+    body.tenant = input.tenantInline;
+  } else if (input.tenant) {
+    body.tenant = input.tenant;
+  }
   if (input.envOverride && Object.keys(input.envOverride).length > 0) {
     body.envOverride = input.envOverride;
   }
@@ -69,12 +99,22 @@ export async function openAgentStream(input: {
   baseUrl: string;
   chatId: string;
   text: string;
+  /** Tenant slug (legacy path). */
   tenant?: string;
+  /**
+   * Inline tenant payload (INFT path).
+   * When provided, takes precedence over `tenant`.
+   */
+  tenantInline?: TenantPayload;
   /** Per-request env overrides forwarded to the agent runtime (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
   envOverride?: Record<string, string>;
 }): Promise<OpenStreamHandle> {
   const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
-  if (input.tenant) body.tenant = input.tenant;
+  if (input.tenantInline) {
+    body.tenant = input.tenantInline;
+  } else if (input.tenant) {
+    body.tenant = input.tenant;
+  }
   if (input.envOverride && Object.keys(input.envOverride).length > 0) {
     body.envOverride = input.envOverride;
   }

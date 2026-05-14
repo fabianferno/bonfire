@@ -47,7 +47,7 @@ export function serverRoutes(deps: ServerRouteDeps) {
         funding: {
           faucetUrl: 'https://faucet.0g.ai',
           rpcUrl: 'https://evmrpc-testnet.0g.ai',
-          chainId: 16601,
+          chainId: 16602,
           minRecommendedBalance: '4',
           tokenSymbol: 'OG',
           note: 'Fund this address with at least 4 OG. The 0G ledger requires a 3 OG minimum + gas reserve.',

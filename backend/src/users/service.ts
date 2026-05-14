@@ -6,9 +6,11 @@ import { collections } from '../db/types.js';
 const ci = { locale: 'en', strength: 2 } as const;
 
 export interface CreateUserInput {
-  email: string;
+  privyDid?: string;
+  walletAddress?: string | null;
+  email?: string | null;
   username: string;
-  passwordHash: string;
+  passwordHash?: string | null;
   displayName: string;
   avatarUrl?: string | null;
   bio?: string | null;
@@ -19,9 +21,11 @@ export async function createUser(db: Db, input: CreateUserInput): Promise<UserDo
   const now = new Date();
   const doc: UserDoc = {
     _id: new OID(),
-    email: input.email.toLowerCase(),
+    privyDid: input.privyDid ?? '',
+    walletAddress: input.walletAddress ?? null,
+    email: input.email ? input.email.toLowerCase() : null,
     username: input.username.toLowerCase(),
-    passwordHash: input.passwordHash,
+    passwordHash: input.passwordHash ?? null,
     displayName: input.displayName,
     avatarUrl: input.avatarUrl ?? null,
     bio: input.bio ?? null,

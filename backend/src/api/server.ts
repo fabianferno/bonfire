@@ -6,6 +6,7 @@ import { serverRoutes } from './routes/servers.js';
 import { agentRoutes } from './routes/agents.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
+import { internalRoutes } from './routes/internal.js';
 
 export interface AppDeps { db: Db; jwtSecret: string; jwtExpiresIn: string; }
 
@@ -18,5 +19,6 @@ export function buildApp(deps: AppDeps) {
   app.route('/', agentRoutes(deps));
   app.route('/', channelRoutes(deps));
   app.route('/', messageRoutes(deps));
+  app.route('/', internalRoutes({ db: deps.db }));
   return app;
 }

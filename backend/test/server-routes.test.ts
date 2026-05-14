@@ -17,6 +17,7 @@ describe('server routes', () => {
     expect(r.status).toBe(201);
     expect(r.body.server.slug).toBe('research-lab');
     expect(r.body.server.ownerId).toBe(me.user.id);
+    expect(r.body.wallet.address).toMatch(/^0x[a-fA-F0-9]{40}$/);
 
     const channels = await jsonReq(app, 'GET', `/v1/servers/${r.body.server.id}/channels`, undefined, me.token);
     expect(channels.status).toBe(200);

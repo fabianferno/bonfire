@@ -10,6 +10,7 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   MAX_CASCADE_HOPS: z.coerce.number().int().nonnegative().default(5),
   MAX_INVOCATIONS_PER_ROOT: z.coerce.number().int().positive().default(20),
+  OG_RPC_URL: z.string().url().default('https://evmrpc-testnet.0g.ai'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

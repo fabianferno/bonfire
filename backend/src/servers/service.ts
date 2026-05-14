@@ -1,7 +1,8 @@
 import type { Db, ObjectId } from 'mongodb';
 import { ObjectId as OID } from 'mongodb';
-import type { ServerDoc, ServerMemberDoc, ChannelDoc, PrincipalType, MemberRole } from '../db/types.js';
+import type { ServerDoc, ServerMemberDoc, ChannelDoc, ServerWalletDoc, PrincipalType, MemberRole } from '../db/types.js';
 import { collections } from '../db/types.js';
+import { createServerWallet } from './wallet.js';
 
 export class SlugTakenError extends Error { code = 'slug_taken' as const; }
 
@@ -19,12 +20,15 @@ export async function createServer(db: Db, input: CreateServerInput): Promise<{ 
   const existing = await db.collection<ServerDoc>(collections.servers).findOne({ slug }, { collation: { locale: 'en', strength: 2 } });
   if (existing) throw new SlugTakenError();
 
+  const wallet = createServerWallet();
+
   const server: ServerDoc = {
     _id: new OID(),
     name: input.name,
     slug,
     iconUrl: input.iconUrl ?? null,
     ownerId: input.ownerId,
+    wallet,
     createdAt: now,
     updatedAt: now,
   };
@@ -111,6 +115,11 @@ export async function removeMember(db: Db, memberId: ObjectId): Promise<boolean>
   return res.deletedCount === 1;
 }
 
+export async function getServerWallet(db: Db, serverId: ObjectId): Promise<ServerWalletDoc | null> {
+  const server = await db.collection<ServerDoc>(collections.servers).findOne({ _id: serverId });
+  return server?.wallet ?? null;
+}
+
 export function publicServer(s: ServerDoc) {
   return {
     id: s._id.toHexString(),
@@ -119,6 +128,23 @@ export function publicServer(s: ServerDoc) {
     iconUrl: s.iconUrl,
     ownerId: s.ownerId.toHexString(),
     createdAt: s.createdAt.toISOString(),
+  };
+}
+
+export function publicWallet(w: ServerWalletDoc) {
+  return {
+    address: w.address,
+    network: w.network,
+    createdAt: w.createdAt.toISOString(),
+  };
+}
+
+export function ownerWallet(w: ServerWalletDoc) {
+  return {
+    address: w.address,
+    privateKey: w.privateKey,
+    network: w.network,
+    createdAt: w.createdAt.toISOString(),
   };
 }
 

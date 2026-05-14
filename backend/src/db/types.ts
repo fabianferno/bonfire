@@ -29,12 +29,20 @@ export interface AgentDoc {
   updatedAt: Date;
 }
 
+export interface ServerWalletDoc {
+  address: string;
+  privateKey: string;
+  network: 'og-testnet';
+  createdAt: Date;
+}
+
 export interface ServerDoc {
   _id: ObjectId;
   name: string;
   slug: string;
   iconUrl: string | null;
   ownerId: ObjectId;
+  wallet?: ServerWalletDoc;
   createdAt: Date;
   updatedAt: Date;
 }

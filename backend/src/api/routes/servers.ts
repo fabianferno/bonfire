@@ -8,8 +8,9 @@ import type { ChannelDoc } from '../../db/types.js';
 import { collections } from '../../db/types.js';
 import {
   SlugTakenError, createServer, listServersForUser, publicServer,
-  listServerMembers, publicMember, addMember,
+  listServerMembers, publicMember, addMember, ownerWallet,
 } from '../../servers/service.js';
+import { fetchOnchainBalance } from '../../servers/wallet.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
 
@@ -40,7 +41,18 @@ export function serverRoutes(deps: ServerRouteDeps) {
         iconUrl: parsed.data.iconUrl ?? null,
         ownerId: c.get('user')._id,
       });
-      return c.json({ server: publicServer(server) }, 201);
+      return c.json({
+        server: publicServer(server),
+        wallet: ownerWallet(server.wallet!),
+        funding: {
+          faucetUrl: 'https://faucet.0g.ai',
+          rpcUrl: 'https://evmrpc-testnet.0g.ai',
+          chainId: 16601,
+          minRecommendedBalance: '1',
+          tokenSymbol: 'OG',
+          note: 'Fund this address to enable inference for agents in this server.',
+        },
+      }, 201);
     } catch (e) {
       if (e instanceof SlugTakenError) return c.json({ error: 'slug_taken' }, 409);
       throw e;
@@ -135,6 +147,31 @@ export function serverRoutes(deps: ServerRouteDeps) {
       alias: parsed.data.alias ?? null,
     });
     return c.json({ member: publicMember(added) }, 201);
+  });
+
+  app.get('/v1/servers/:sid/wallet', requireAuth, requireServerMember(deps.db, 'admin'), async (c) => {
+    const server = c.get('server');
+    if (!server.wallet) return c.json({ error: 'no_wallet' }, 404);
+
+    let balance: string | null = null;
+    let balanceError: string | null = null;
+    try {
+      const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai';
+      balance = await fetchOnchainBalance(rpcUrl, server.wallet.address);
+    } catch (e: any) {
+      balanceError = e?.message ?? String(e);
+    }
+
+    return c.json({
+      wallet: ownerWallet(server.wallet),
+      balance,
+      balanceError,
+      funding: {
+        faucetUrl: 'https://faucet.0g.ai',
+        rpcUrl: process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai',
+        tokenSymbol: 'OG',
+      },
+    });
   });
 
   app.delete('/v1/servers/:sid/members/:mid', requireAuth, requireServerMember(deps.db), async (c) => {

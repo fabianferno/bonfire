@@ -93,6 +93,15 @@ export const bf = {
     avatarUrl?: string | null;
     tags?: string[];
     visibility?: 'public' | 'unlisted';
+    env?: Record<string, string>;
+    llm?: {
+      provider?: 'openai-compatible' | 'zerog';
+      baseUrl?: string;
+      model?: string;
+      apiKeyEnv?: string;
+      temperature?: number;
+      maxTokens?: number;
+    };
   }) => api<{ agent: BackendAgent; agentKey: string }>('POST', '/v1/agents', body),
 
   getUser: (username: string) =>

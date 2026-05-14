@@ -1,8 +1,7 @@
+packages:
+  - "mcp-server"
+
 allowBuilds:
-  argon2: true
-  esbuild: true
-  mongodb-memory-server: true
-onlyBuiltDependencies:
-  - argon2
-  - esbuild
-  - mongodb-memory-server
+  argon2: set this to true or false
+  esbuild: set this to true or false
+  mongodb-memory-server: set this to true or false

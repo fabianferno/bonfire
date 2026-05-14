@@ -4,9 +4,14 @@ import { createIndexes } from '../../src/db/indexes.js';
 
 export const TEST_JWT_SECRET = 'x'.repeat(32);
 
-export async function makeApp(db: Db) {
+export async function makeApp(db: Db, overrides: { cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number } } = {}) {
   await createIndexes(db);
-  return buildApp({ db, jwtSecret: TEST_JWT_SECRET, jwtExpiresIn: '1h' });
+  return buildApp({
+    db,
+    jwtSecret: TEST_JWT_SECRET,
+    jwtExpiresIn: '1h',
+    cascadeConfig: overrides.cascadeConfig,
+  });
 }
 
 export async function jsonReq(app: ReturnType<typeof buildApp>, method: string, path: string, body?: unknown, token?: string) {

@@ -9,7 +9,8 @@ import { resolveMentions } from '../../messages/mentions.js';
 import {
   insertMessage, listChannelMessages, findMessageById, deleteMessage, publicMessage,
 } from '../../messages/service.js';
-import { computeInvocationSet, runInvocation, startStreamingInvocation } from '../../agents/invoker.js';
+import { computeInvocationSet, startStreamingInvocation, runCascade } from '../../agents/invoker.js';
+import { collections } from '../../db/types.js';
 import { takeStream } from '../../messages/stream-registry.js';
 import { sseChunks } from '../../agents/client.js';
 import { log } from '../../util/logger.js';
@@ -21,7 +22,11 @@ const PostMessageBody = z.object({
   stream: z.boolean().optional(),
 });
 
-export interface MessageRouteDeps { db: Db; jwtSecret: string; }
+export interface MessageRouteDeps {
+  db: Db;
+  jwtSecret: string;
+  cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number };
+}
 
 export function messageRoutes(deps: MessageRouteDeps) {
   const app = new Hono<ChannelBindings>();
@@ -45,20 +50,32 @@ export function messageRoutes(deps: MessageRouteDeps) {
       replyToId: parsed.data.replyToId ? new ObjectId(parsed.data.replyToId) : null,
     });
 
-    const agents = await computeInvocationSet({ db: deps.db, channel, userMessage });
+    // Backfill cascade metadata on the root user message.
+    await deps.db.collection(collections.messages).updateOne(
+      { _id: userMessage._id },
+      { $set: { cascadeRootId: userMessage._id, cascadeHop: 0, parentMessageId: null } }
+    );
+    const userMsgWithMeta = await deps.db.collection(collections.messages).findOne({ _id: userMessage._id });
 
     if (parsed.data.stream) {
+      // Streaming path remains single-hop in v1.
+      const agents = await computeInvocationSet({ db: deps.db, channel, userMessage });
       const handles = await startStreamingInvocation({ db: deps.db, channel, userMessage }, agents);
       return c.json({
-        userMessage: publicMessage(userMessage),
+        userMessage: publicMessage(userMsgWithMeta as any),
         replies: [],
         streamIds: handles.map(h => h.streamId),
       }, 201);
     }
 
-    const replies = await runInvocation({ db: deps.db, channel, userMessage }, agents);
+    const replies = await runCascade({
+      db: deps.db,
+      channel,
+      rootMessage: userMsgWithMeta as any,
+      config: deps.cascadeConfig,
+    });
     return c.json({
-      userMessage: publicMessage(userMessage),
+      userMessage: publicMessage(userMsgWithMeta as any),
       replies: replies.map(publicMessage),
     }, 201);
   });

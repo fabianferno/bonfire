@@ -8,7 +8,12 @@ import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { internalRoutes } from './routes/internal.js';
 
-export interface AppDeps { db: Db; jwtSecret: string; jwtExpiresIn: string; }
+export interface AppDeps {
+  db: Db;
+  jwtSecret: string;
+  jwtExpiresIn: string;
+  cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number };
+}
 
 export function buildApp(deps: AppDeps) {
   const app = new Hono();

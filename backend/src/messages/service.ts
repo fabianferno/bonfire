@@ -59,6 +59,9 @@ export function publicMessage(m: MessageDoc) {
     content: m.content,
     mentions: m.mentions.map(x => ({ type: x.type, id: x.id.toHexString() })),
     replyToId: m.replyToId?.toHexString() ?? null,
+    parentMessageId: m.parentMessageId?.toHexString() ?? null,
+    cascadeRootId: m.cascadeRootId?.toHexString() ?? null,
+    cascadeHop: m.cascadeHop ?? null,
     createdAt: m.createdAt.toISOString(),
     editedAt: m.editedAt?.toISOString() ?? null,
   };

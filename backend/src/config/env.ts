@@ -8,6 +8,8 @@ const EnvSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   PORT: z.coerce.number().int().positive().default(8080),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
+  MAX_CASCADE_HOPS: z.coerce.number().int().nonnegative().default(5),
+  MAX_INVOCATIONS_PER_ROOT: z.coerce.number().int().positive().default(20),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

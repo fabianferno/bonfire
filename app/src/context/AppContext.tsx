@@ -1,5 +1,23 @@
 "use client";
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { bf } from "@/lib/api-bonfire";
+import type {
+  BackendServer,
+  BackendChannel,
+  BackendMessage,
+  BackendAgent,
+  BackendMember,
+} from "@/lib/types";
+
+// ─── Public types (kept stable so existing components compile) ─────────────
 
 export type ChannelType = "text" | "voice";
 export type AgentStatus = "online" | "busy" | "idle" | "offline";
@@ -17,12 +35,12 @@ export interface Agent {
   name: string;
   avatar?: string;
   description: string;
-  model: string;
+  model?: string;
   status: AgentStatus;
   isBot: boolean;
   skills: Skill[];
-  rateInput: number;   // 0G per 1k tokens
-  rateOutput: number;
+  rateInput?: number;
+  rateOutput?: number;
   acquisition?: AcquisitionMode;
   teeHash?: string;
 }
@@ -37,6 +55,10 @@ export interface Message {
   isBot?: boolean;
   teeHash?: string;
   cost?: number;
+  // cascade metadata (optional — MessageRow ignores these if absent)
+  cascadeHop?: number | null;
+  cascadeRootId?: string | null;
+  replyToId?: string | null;
 }
 
 export interface Channel {
@@ -76,7 +98,7 @@ export interface Server {
   channels: Channel[];
   agents: Agent[];
   members: Member[];
-  balance: number;     // in 0G
+  balance: number;
   spentToday: number;
   auditLog: AuditEntry[];
 }
@@ -97,233 +119,577 @@ interface AppContextValue {
   setActiveServer: (id: string) => void;
   setActiveChannel: (id: string) => void;
   createServer: (name: string, color: string, description?: string) => void;
-  createChannel: (serverId: string, name: string, type: ChannelType, description?: string) => void;
+  createChannel: (
+    serverId: string,
+    name: string,
+    type: ChannelType,
+    description?: string,
+  ) => void;
   sendMessage: (serverId: string, channelId: string, content: string) => void;
   updateUser: (profile: Partial<UserProfile>) => void;
   addAgent: (serverId: string, agent: Agent) => void;
-  updateAgentStatus: (serverId: string, agentId: string, status: AgentStatus) => void;
+  updateAgentStatus: (
+    serverId: string,
+    agentId: string,
+    status: AgentStatus,
+  ) => void;
   leaveServer: (serverId: string) => void;
-  addAuditEntry: (serverId: string, entry: Omit<AuditEntry, "id" | "timestamp">) => void;
+  addAuditEntry: (
+    serverId: string,
+    entry: Omit<AuditEntry, "id" | "timestamp">,
+  ) => void;
   activeServer: Server | undefined;
   activeChannel: Channel | undefined;
+  loading: boolean;
+  error: string | null;
 }
 
-let _nextId = 1000;
-const uid = () => { _nextId += 1; return String(_nextId); };
+// ─── ID helpers ────────────────────────────────────────────────────────────
 
-const STARTER_AGENTS: Agent[] = [
-  {
-    id: "agent-researcher",
-    name: "ResearchBot",
-    description: "Searches, summarises, and synthesises information from the web and documents.",
-    model: "Qwen3.6-Plus",
+let _nextId = 9000;
+const uid = () => {
+  _nextId += 1;
+  return String(_nextId);
+};
+
+const LS_ACTIVE_SERVER = "bonfire_active_server";
+
+// ─── Mappers ───────────────────────────────────────────────────────────────
+
+function mapServer(s: BackendServer): Omit<Server, "channels" | "agents" | "members"> {
+  return {
+    id: s.id,
+    name: s.name,
+    color: "#f97316", // backend has no color — use default fire orange
+    icon: s.iconUrl ?? undefined,
+    description: undefined,
+    balance: 0,
+    spentToday: 0,
+    auditLog: [],
+  };
+}
+
+function mapChannel(c: BackendChannel): Channel {
+  return {
+    id: c.id,
+    name: c.name,
+    type: "text",
+    description: c.topic ?? undefined,
+    messages: [],
+    defaultAgentId: c.defaultAgentId ?? undefined,
+  };
+}
+
+function mapAgent(a: BackendAgent): Agent {
+  return {
+    id: a.id,
+    name: a.name,
+    avatar: a.avatarUrl ?? undefined,
+    description: a.description,
+    model: undefined,
     status: "online",
     isBot: true,
-    skills: [
-      { id: "sk-1", name: "Web Search", description: "Search the web for up-to-date info", command: "/search" },
-      { id: "sk-2", name: "Summarise", description: "Summarise any text or URL", command: "/summarise" },
-    ],
-    rateInput: 0.001,
-    rateOutput: 0.002,
-    teeHash: "0xabcd1234...ef56",
-    acquisition: "licensed",
-  },
-  {
-    id: "agent-coder",
-    name: "CodeAssist",
-    description: "Reviews, writes, and debugs code across languages.",
-    model: "DeepSeek-V3",
-    status: "idle",
-    isBot: true,
-    skills: [
-      { id: "sk-3", name: "Code Review", description: "Review a PR or code block", command: "/review" },
-      { id: "sk-4", name: "Write Code", description: "Generate code from a spec", command: "/write" },
-    ],
-    rateInput: 0.001,
-    rateOutput: 0.002,
-    teeHash: "0xdead9876...ba54",
-    acquisition: "rented",
-  },
-];
+    skills: [],
+    rateInput: undefined,
+    rateOutput: undefined,
+    teeHash: undefined,
+  };
+}
 
-const DEFAULT_SERVER: Server = {
-  id: "server-1",
-  name: "My First BonFire",
-  color: "#f97316",
-  description: "Welcome to your first agent workspace!",
-  balance: 50,
-  spentToday: 1.2,
-  channels: [
-    {
-      id: "ch-general",
-      name: "general",
-      type: "text",
-      description: "General chat — talk to your agents here",
-      messages: [
-        {
-          id: "msg-1",
-          author: "ResearchBot",
-          authorId: "agent-researcher",
-          content: "👋 Welcome to your BonFire workspace! I'm ResearchBot. Try `/search` to get started.",
-          date: new Date().toLocaleDateString(),
-          isBot: true,
-          teeHash: "0xabcd1234...ef56",
-          cost: 0.001,
-        },
-      ],
-      defaultAgentId: "agent-researcher",
-    },
-    {
-      id: "ch-code",
-      name: "code-review",
-      type: "text",
-      description: "Automated code review with CodeAssist",
-      messages: [],
-      defaultAgentId: "agent-coder",
-    },
-    {
-      id: "ch-voice",
-      name: "Voice Lounge",
-      type: "voice",
-      description: "",
-      messages: [],
-    },
-  ],
-  agents: STARTER_AGENTS,
-  members: [
-    { id: "me", username: "You", discriminator: "#0001", online: true },
-  ],
-  auditLog: [
-    { id: "al-1", timestamp: new Date(Date.now() - 60000).toISOString(), agentId: "agent-researcher", agentName: "ResearchBot", action: "Responded to /search query", channel: "general", cost: 0.0023, teeHash: "0xabcd1234...ef56" },
-    { id: "al-2", timestamp: new Date(Date.now() - 120000).toISOString(), agentId: "agent-coder", agentName: "CodeAssist", action: "Completed /review on 3 files", channel: "code-review", cost: 0.0041, teeHash: "0xdead9876...ba54" },
-    { id: "al-3", timestamp: new Date(Date.now() - 300000).toISOString(), agentId: "agent-researcher", agentName: "ResearchBot", action: "Summarised URL via /summarise", channel: "general", cost: 0.0011, teeHash: "0xabcd1234...ef56" },
-  ],
-};
+function mapMember(m: BackendMember): Member {
+  return {
+    id: m.principalId,
+    username: m.alias ?? m.principalId,
+    discriminator: "#0000",
+    online: true,
+  };
+}
 
-const DEFAULT_USER: UserProfile = {
-  id: "me",
-  username: "You",
-  discriminator: "#0001",
-};
+function mapMessage(
+  m: BackendMessage,
+  agentMap: Map<string, Agent>,
+  userMap: Map<string, UserProfile>,
+  selfId: string,
+): Message {
+  const isBot = m.authorType === "agent";
+  let author = m.authorId;
+  let avatar: string | undefined;
+
+  if (isBot) {
+    const agent = agentMap.get(m.authorId);
+    author = agent?.name ?? m.authorId;
+    avatar = agent?.avatar;
+  } else {
+    if (m.authorId === selfId) {
+      author = userMap.get(selfId)?.username ?? "You";
+    } else {
+      author = userMap.get(m.authorId)?.username ?? m.authorId;
+    }
+  }
+
+  return {
+    id: m.id,
+    author,
+    authorId: m.authorId,
+    avatar,
+    content: m.content,
+    date: new Date(m.createdAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    isBot,
+    cascadeHop: m.cascadeHop,
+    cascadeRootId: m.cascadeRootId,
+    replyToId: m.replyToId,
+  };
+}
+
+// ─── Context ───────────────────────────────────────────────────────────────
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUserState] = useState<UserProfile>(DEFAULT_USER);
-  const [servers, setServers] = useState<Server[]>([DEFAULT_SERVER]);
-  const [activeServerId, setActiveServerId] = useState(DEFAULT_SERVER.id);
-  const [activeChannelId, setActiveChannelId] = useState(DEFAULT_SERVER.channels[0].id);
+  const { user: authUser, status: authStatus } = useAuth();
 
-  const activeServer = servers.find(s => s.id === activeServerId);
-  const activeChannel = activeServer?.channels.find(c => c.id === activeChannelId);
+  // Derive UserProfile directly from authUser — no separate state needed
+  const user: UserProfile = authUser
+    ? {
+        id: authUser.id,
+        username: authUser.displayName || authUser.username,
+        discriminator: "#0001",
+        avatar: authUser.avatarUrl ?? undefined,
+      }
+    : { id: "", username: "You", discriminator: "#0001" };
+
+  const [servers, setServers] = useState<Server[]>([]);
+  const [activeServerId, setActiveServerId] = useState("");
+  const [activeChannelId, setActiveChannelId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Agent / user caches for message mapping
+  const agentMapRef = useRef<Map<string, Agent>>(new Map());
+  const userMapRef = useRef<Map<string, UserProfile>>(new Map());
+
+  // Polling cleanup
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeChannelIdRef = useRef(activeChannelId);
+
+  // Keep ref in sync via effect (not during render)
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannelId;
+  }, [activeChannelId]);
+
+  // Keep user map cache in sync
+  useEffect(() => {
+    if (authUser) {
+      userMapRef.current.set(authUser.id, user);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser]);
+
+  // ── Merge messages helper ──────────────────────────────────────────────
+  const mergeMessages = useCallback(
+    (existing: Message[], incoming: Message[]): Message[] => {
+      const byId = new Map<string, Message>();
+      for (const m of existing) byId.set(m.id, m);
+      for (const m of incoming) byId.set(m.id, m);
+      return Array.from(byId.values()).sort((a, b) => {
+        // date strings from mapMessage are locale times — use id lexicographic order
+        // as a stable tiebreak; backend returns newest-first so we need oldest-first
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+    },
+    [],
+  );
+
+  // ── Fetch messages for a channel and merge into state ─────────────────
+  const fetchAndMergeMessages = useCallback(
+    async (channelId: string, selfId: string) => {
+      try {
+        const { messages: raw } = await bf.listMessages(channelId, {
+          limit: 50,
+        });
+        const mapped = raw.map((m) =>
+          mapMessage(m, agentMapRef.current, userMapRef.current, selfId),
+        );
+        setServers((prev) =>
+          prev.map((s) => ({
+            ...s,
+            channels: s.channels.map((c) => {
+              if (c.id !== channelId) return c;
+              return { ...c, messages: mergeMessages(c.messages, mapped) };
+            }),
+          })),
+        );
+      } catch {
+        // Silently ignore poll errors
+      }
+    },
+    [mergeMessages],
+  );
+
+  // ── Start / stop polling ───────────────────────────────────────────────
+  const startPolling = useCallback(
+    (channelId: string, selfId: string) => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = setInterval(() => {
+        // Only poll if channel hasn't changed
+        if (activeChannelIdRef.current === channelId) {
+          fetchAndMergeMessages(channelId, selfId);
+        }
+      }, 3000);
+    },
+    [fetchAndMergeMessages],
+  );
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // ── Load servers on auth ───────────────────────────────────────────────
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !authUser) return;
+
+    let cancelled = false;
+
+    async function loadServers() {
+      setLoading(true);
+      setError(null);
+      try {
+        const { servers: raw } = await bf.listServers();
+        if (cancelled) return;
+
+        const mapped: Server[] = raw.map((s) => ({
+          ...mapServer(s),
+          channels: [],
+          agents: [],
+          members: [],
+        }));
+        setServers(mapped);
+
+        // Pick active server
+        const stored = typeof window !== "undefined"
+          ? localStorage.getItem(LS_ACTIVE_SERVER)
+          : null;
+        const initialId =
+          stored && mapped.find((s) => s.id === stored)
+            ? stored
+            : mapped[0]?.id ?? "";
+        if (!cancelled) setActiveServerId(initialId);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load servers");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadServers();
+    return () => { cancelled = true; };
+  }, [authStatus, authUser]);
+
+  // ── Load channels + members when active server changes ────────────────
+  useEffect(() => {
+    if (!activeServerId || !authUser) return;
+
+    let cancelled = false;
+
+    async function loadServerData() {
+      try {
+        const [{ channels: rawCh }, { members: rawMembers }] = await Promise.all([
+          bf.getChannels(activeServerId),
+          bf.listMembers(activeServerId),
+        ]);
+        if (cancelled) return;
+
+        const textChannels = rawCh
+          .filter((c) => c.type === "text")
+          .map(mapChannel);
+
+        // Separate agent vs user members
+        const agentMembers = rawMembers.filter((m) => m.principalType === "agent");
+        const userMembers = rawMembers.filter((m) => m.principalType === "user");
+
+        // Fetch agent details for all agent members in parallel
+        const agentDetails = await Promise.allSettled(
+          agentMembers.map((m) => bf.getAgent(m.principalId)),
+        );
+
+        const agents: Agent[] = agentDetails
+          .filter(
+            (r): r is PromiseFulfilledResult<{ agent: BackendAgent }> =>
+              r.status === "fulfilled",
+          )
+          .map((r) => mapAgent(r.value.agent));
+
+        // Populate agent map cache
+        for (const a of agents) agentMapRef.current.set(a.id, a);
+
+        const members: Member[] = userMembers.map(mapMember);
+
+        if (cancelled) return;
+
+        setServers((prev) =>
+          prev.map((s) => {
+            if (s.id !== activeServerId) return s;
+            return { ...s, channels: textChannels, agents, members };
+          }),
+        );
+
+        // Set first text channel as active
+        const firstCh = textChannels[0];
+        if (firstCh) {
+          setActiveChannelId(firstCh.id);
+        }
+      } catch {
+        // Non-fatal — server data load errors are soft
+      }
+    }
+
+    loadServerData();
+    return () => { cancelled = true; };
+  }, [activeServerId, authUser]);
+
+  // ── Fetch messages + start polling when active channel changes ────────
+  useEffect(() => {
+    if (!activeChannelId || !authUser) return;
+
+    stopPolling();
+    fetchAndMergeMessages(activeChannelId, authUser.id);
+    startPolling(activeChannelId, authUser.id);
+
+    return () => stopPolling();
+  }, [activeChannelId, authUser, fetchAndMergeMessages, startPolling, stopPolling]);
+
+  // ── Persist active server ──────────────────────────────────────────────
+  useEffect(() => {
+    if (activeServerId && typeof window !== "undefined") {
+      localStorage.setItem(LS_ACTIVE_SERVER, activeServerId);
+    }
+  }, [activeServerId]);
+
+  // ── Actions ───────────────────────────────────────────────────────────
 
   const setActiveServer = useCallback((id: string) => {
     setActiveServerId(id);
-    setServers(prev => {
-      const srv = prev.find(s => s.id === id);
-      if (srv) {
-        const first = srv.channels.find(c => c.type === "text") ?? srv.channels[0];
-        if (first) setActiveChannelId(first.id);
+    // Channel will be reset in the "active server changes" effect
+  }, []);
+
+  const setActiveChannel = useCallback((id: string) => {
+    setActiveChannelId(id);
+  }, []);
+
+  const createServer = useCallback(
+    async (name: string, _color: string, _description?: string) => {
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 32) || `server-${Date.now()}`;
+      try {
+        const { server: raw } = await bf.createServer({ name, slug });
+        const newServer: Server = {
+          ...mapServer(raw),
+          color: _color,
+          description: _description,
+          channels: [],
+          agents: [],
+          members: [],
+        };
+        setServers((prev) => [...prev, newServer]);
+        setActiveServerId(raw.id);
+        setActiveChannelId("");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create server");
       }
-      return prev;
-    });
-  }, []);
+    },
+    [],
+  );
 
-  const setActiveChannel = useCallback((id: string) => setActiveChannelId(id), []);
-
-  const createServer = useCallback((name: string, color: string, description?: string) => {
-    const id = uid();
-    const chId = uid();
-    const srv: Server = {
-      id,
-      name,
-      color,
-      description,
-      balance: 0,
-      spentToday: 0,
-      channels: [
-        { id: chId, name: "general", type: "text", description: `Welcome to ${name}!`, messages: [
-          { id: uid(), author: "System", authorId: "system", content: `Welcome to ${name}! Fund your server with 0G to invite agents.`, date: new Date().toLocaleDateString(), isBot: true },
-        ]},
-        { id: uid(), name: "General Voice", type: "voice", description: "", messages: [] },
-      ],
-      agents: [],
-      members: [{ id: "me", username: user.username, discriminator: user.discriminator, avatar: user.avatar, online: true }],
-      auditLog: [],
-    };
-    setServers(prev => [...prev, srv]);
-    setActiveServerId(id);
-    setActiveChannelId(chId);
-  }, [user]);
-
-  const createChannel = useCallback((serverId: string, name: string, type: ChannelType, description?: string) => {
-    const id = uid();
-    setServers(prev => prev.map(s => s.id !== serverId ? s : {
-      ...s,
-      channels: [...s.channels, { id, name, type, description: description ?? "", messages: [] }],
-    }));
-    if (type === "text") setActiveChannelId(id);
-  }, []);
-
-  const sendMessage = useCallback((serverId: string, channelId: string, content: string) => {
-    if (!content.trim()) return;
-    const msg: Message = {
-      id: uid(),
-      author: user.username,
-      authorId: user.id,
-      avatar: user.avatar,
-      content: content.trim(),
-      date: new Date().toLocaleDateString(),
-    };
-    setServers(prev => prev.map(s => s.id !== serverId ? s : {
-      ...s,
-      channels: s.channels.map(c => c.id !== channelId ? c : { ...c, messages: [...c.messages, msg] }),
-    }));
-  }, [user]);
-
-  const updateUser = useCallback((profile: Partial<UserProfile>) => {
-    setUserState(prev => ({ ...prev, ...profile }));
-  }, []);
-
-  const addAgent = useCallback((serverId: string, agent: Agent) => {
-    setServers(prev => prev.map(s => s.id !== serverId ? s : { ...s, agents: [...s.agents, agent] }));
-  }, []);
-
-  const updateAgentStatus = useCallback((serverId: string, agentId: string, status: AgentStatus) => {
-    setServers(prev => prev.map(s => s.id !== serverId ? s : {
-      ...s,
-      agents: s.agents.map(a => a.id !== agentId ? a : { ...a, status }),
-    }));
-  }, []);
-
-  const leaveServer = useCallback((serverId: string) => {
-    setServers(prev => {
-      const remaining = prev.filter(s => s.id !== serverId);
-      if (remaining.length > 0) {
-        setActiveServerId(remaining[0].id);
-        const first = remaining[0].channels.find(c => c.type === "text") ?? remaining[0].channels[0];
-        if (first) setActiveChannelId(first.id);
+  const createChannel = useCallback(
+    async (
+      serverId: string,
+      name: string,
+      type: ChannelType,
+      description?: string,
+    ) => {
+      // Voice channels are not supported by backend — no-op
+      if (type === "voice") {
+        const id = uid();
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id !== serverId
+              ? s
+              : {
+                  ...s,
+                  channels: [
+                    ...s.channels,
+                    { id, name, type: "voice", description: description ?? "", messages: [] },
+                  ],
+                },
+          ),
+        );
+        return;
       }
-      return remaining;
-    });
+      try {
+        const { channel: raw } = await bf.createChannel(serverId, {
+          name,
+          topic: description,
+        });
+        const ch = mapChannel(raw);
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id !== serverId ? s : { ...s, channels: [...s.channels, ch] },
+          ),
+        );
+        setActiveChannelId(ch.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create channel");
+      }
+    },
+    [],
+  );
+
+  const sendMessage = useCallback(
+    async (serverId: string, channelId: string, content: string) => {
+      if (!content.trim() || !authUser) return;
+      try {
+        const { userMessage, replies } = await bf.postMessage(channelId, {
+          content: content.trim(),
+        });
+        const allMessages = [userMessage, ...replies];
+        const mapped = allMessages.map((m) =>
+          mapMessage(m, agentMapRef.current, userMapRef.current, authUser.id),
+        );
+        setServers((prev) =>
+          prev.map((s) => {
+            if (s.id !== serverId) return s;
+            return {
+              ...s,
+              channels: s.channels.map((c) => {
+                if (c.id !== channelId) return c;
+                return {
+                  ...c,
+                  messages: mergeMessages(c.messages, mapped),
+                };
+              }),
+            };
+          }),
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to send message");
+      }
+    },
+    [authUser, mergeMessages],
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const updateUser = useCallback((_profile: Partial<UserProfile>) => {
+    // User is derived from authUser — no local state to update
   }, []);
 
-  const addAuditEntry = useCallback((serverId: string, entry: Omit<AuditEntry, "id" | "timestamp">) => {
-    setServers(prev => prev.map(s => s.id !== serverId ? s : {
-      ...s,
-      auditLog: [{ ...entry, id: uid(), timestamp: new Date().toISOString() }, ...s.auditLog],
-    }));
-  }, []);
+  const addAgent = useCallback(
+    async (serverId: string, agent: Agent) => {
+      try {
+        await bf.inviteMember(serverId, {
+          principalType: "agent",
+          principalId: agent.id,
+        });
+        // Re-fetch agent list for that server
+        const { members: rawMembers } = await bf.listMembers(
+          serverId,
+          "agent",
+        );
+        const agentDetails = await Promise.allSettled(
+          rawMembers.map((m) => bf.getAgent(m.principalId)),
+        );
+        const agents: Agent[] = agentDetails
+          .filter(
+            (r): r is PromiseFulfilledResult<{ agent: BackendAgent }> =>
+              r.status === "fulfilled",
+          )
+          .map((r) => mapAgent(r.value.agent));
+        for (const a of agents) agentMapRef.current.set(a.id, a);
+        setServers((prev) =>
+          prev.map((s) => (s.id !== serverId ? s : { ...s, agents })),
+        );
+      } catch {
+        // Fall back to optimistic local add
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id !== serverId ? s : { ...s, agents: [...s.agents, agent] },
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  const updateAgentStatus = useCallback(
+    (_serverId: string, _agentId: string, _status: AgentStatus) => {
+      // No backend support — no-op
+    },
+    [],
+  );
+
+  const leaveServer = useCallback(
+    (serverId: string) => {
+      setServers((prev) => {
+        const remaining = prev.filter((s) => s.id !== serverId);
+        if (remaining.length > 0) {
+          setActiveServerId(remaining[0].id);
+          const first = remaining[0].channels.find((c) => c.type === "text") ??
+            remaining[0].channels[0];
+          if (first) setActiveChannelId(first.id);
+          else setActiveChannelId("");
+        } else {
+          setActiveServerId("");
+          setActiveChannelId("");
+        }
+        return remaining;
+      });
+    },
+    [],
+  );
+
+  const addAuditEntry = useCallback(
+    (_serverId: string, _entry: Omit<AuditEntry, "id" | "timestamp">) => {
+      // No backend support — no-op
+    },
+    [],
+  );
+
+  const activeServer = servers.find((s) => s.id === activeServerId);
+  const activeChannel = activeServer?.channels.find(
+    (c) => c.id === activeChannelId,
+  );
 
   return (
-    <AppContext.Provider value={{
-      user, servers, activeServerId, activeChannelId,
-      setActiveServer, setActiveChannel,
-      createServer, createChannel, sendMessage,
-      updateUser, addAgent, updateAgentStatus,
-      leaveServer, addAuditEntry,
-      activeServer, activeChannel,
-    }}>
+    <AppContext.Provider
+      value={{
+        user,
+        servers,
+        activeServerId,
+        activeChannelId,
+        setActiveServer,
+        setActiveChannel,
+        createServer,
+        createChannel,
+        sendMessage,
+        updateUser,
+        addAgent,
+        updateAgentStatus,
+        leaveServer,
+        addAuditEntry,
+        activeServer,
+        activeChannel,
+        loading,
+        error,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

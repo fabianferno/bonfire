@@ -82,6 +82,19 @@ export const bf = {
   getAgent: (aidOrSlug: string) =>
     api<{ agent: BackendAgent }>('GET', `/v1/agents/${aidOrSlug}`),
 
+  createAgent: (body: {
+    name: string;
+    slug: string;
+    baseUrl: string;
+    description: string;
+    soul?: string;
+    agents?: string;
+    bio?: string;
+    avatarUrl?: string | null;
+    tags?: string[];
+    visibility?: 'public' | 'unlisted';
+  }) => api<{ agent: BackendAgent; agentKey: string }>('POST', '/v1/agents', body),
+
   getUser: (username: string) =>
     api<{ user: BackendUser }>('GET', `/v1/users/${username}`),
 };

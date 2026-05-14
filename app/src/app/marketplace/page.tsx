@@ -6,6 +6,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import type { BackendAgent } from '@/lib/types';
 import AgentCard from '@/components/marketplace/AgentCard';
 import InviteToServerModal from '@/components/marketplace/InviteToServerModal';
+import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 
 function MarketplaceContent() {
   const router = useRouter();
@@ -19,6 +20,7 @@ function MarketplaceContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inviteTarget, setInviteTarget] = useState<BackendAgent | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   // query is the controlled input value for the search input only; updated on submit
   const [query, setQuery] = useState(q);
 
@@ -85,11 +87,22 @@ function MarketplaceContent() {
       style={{ background: 'var(--bf-tertiary)' }}
     >
       <div className="max-w-6xl mx-auto">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold text-white mb-2">Marketplace</h1>
-          <p style={{ color: 'var(--bf-gray)' }}>
-            Browse and invite agents into your servers.
-          </p>
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Marketplace</h1>
+            <p style={{ color: 'var(--bf-gray)' }}>
+              Browse and invite agents into your servers.
+            </p>
+          </div>
+          {status === 'authenticated' && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex-shrink-0 px-4 py-2 rounded text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ background: 'var(--bf-fire)', color: 'var(--bf-white)' }}
+            >
+              + Create Agent
+            </button>
+          )}
         </header>
 
         {/* Search bar */}
@@ -171,6 +184,19 @@ function MarketplaceContent() {
         <InviteToServerModal
           agent={inviteTarget}
           onClose={() => setInviteTarget(null)}
+        />
+      )}
+
+      {/* Create agent modal */}
+      {showCreate && (
+        <CreateAgentModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setShowCreate(false);
+            bf.listAgents({ q: q || undefined, tag: tag || undefined })
+              .then((r) => setAgents(r.agents))
+              .catch(() => {});
+          }}
         />
       )}
     </div>

@@ -2,7 +2,8 @@
  * 0G Storage client abstraction.
  *
  * Mock mode (OG_STORAGE_MOCK=1): writes/reads from backend/.storage-mock/<sha256-of-key>.bin.
- * Real mode: uses @0glabs/0g-ts-sdk with OG_INDEXER_URL, OG_BLOCKCHAIN_RPC, OG_PRIVATE_KEY.
+ * Real mode: uses @0gfoundation/0g-ts-sdk (1.2.x). URIs are `og://<rootHash>` where
+ * rootHash is the 0x-prefixed bytes32 merkle root returned by the storage layer.
  */
 
 import { createHash } from 'node:crypto';
@@ -77,95 +78,90 @@ function createMockStorage(): OgStorageClient {
 }
 
 // ---------------------------------------------------------------------------
-// Real implementation (0G network via @0glabs/0g-ts-sdk)
+// Real implementation (0G network via @0gfoundation/0g-ts-sdk 1.2.x)
+//
+// Why @0gfoundation/0g-ts-sdk and not @0glabs/0g-ts-sdk? The latter (0.3.x)
+// reverts on Galileo testnet's Flow contract for some submissions; the
+// foundation 1.2.x package is the working pattern.
 // ---------------------------------------------------------------------------
 
-// Lazily loaded to avoid SDK's ethers/crypto deps in mock/test mode.
-type SdkModule = typeof import('@0glabs/0g-ts-sdk');
-
-let _sdk: SdkModule | null = null;
+// SDK doesn't ship usable types; load via dynamic import + any.
+let _sdkCache: { Indexer: any; MemData: any } | null = null;
 let _sdkError: string | null = null;
 
-async function loadSdk(): Promise<SdkModule> {
-  if (_sdkError) {
-    throw new Error(`@0glabs/0g-ts-sdk failed to load: ${_sdkError}`);
-  }
-  if (_sdk) return _sdk;
-
+async function loadSdk(): Promise<{ Indexer: any; MemData: any }> {
+  if (_sdkError) throw new Error(`@0gfoundation/0g-ts-sdk failed to load: ${_sdkError}`);
+  if (_sdkCache) return _sdkCache;
   try {
-    // Dynamic import defers loading until first real upload/fetch call.
-    _sdk = (await import('@0glabs/0g-ts-sdk')) as SdkModule;
-    return _sdk;
+    const mod: any = await import('@0gfoundation/0g-ts-sdk');
+    _sdkCache = { Indexer: mod.Indexer, MemData: mod.MemData };
+    return _sdkCache;
   } catch (err) {
     _sdkError = String(err);
-    throw new Error(
-      `Failed to load @0glabs/0g-ts-sdk — install it or set OG_STORAGE_MOCK=1: ${_sdkError}`,
-    );
+    throw new Error(`Failed to load @0gfoundation/0g-ts-sdk — install it or set OG_STORAGE_MOCK=1: ${_sdkError}`);
   }
 }
 
 /**
- * Real 0G storage client.
+ * Real 0G Storage client.
  *
- * Environment variables required:
- *   OG_INDEXER_URL    — 0G indexer URL (default: https://indexer-storage-testnet-turbo.0g.ai)
- *   OG_BLOCKCHAIN_RPC — 0G chain JSON-RPC (default: https://evmrpc-testnet.0g.ai)
- *   OG_PRIVATE_KEY    — Hex private key for the upload signer wallet
+ * Required env:
+ *   OG_RPC_URL                     — 0G chain JSON-RPC (default: https://evmrpc-testnet.0g.ai)
+ *   OG_INDEXER_URL                 — 0G storage indexer (default: https://indexer-storage-testnet-turbo.0g.ai)
+ *   STORAGE_UPLOADER_PRIVATE_KEY   — hex private key of the wallet that pays for storage submissions.
+ *                                    Falls back to PLATFORM_EXECUTOR_PRIVATE_KEY if unset.
+ *
+ * URI scheme: `og://<rootHash>` where rootHash is the 0x-prefixed 32-byte
+ * keccak-merkle root returned by the storage layer for the uploaded blob.
  */
 function createRealStorage(): OgStorageClient {
-  const indexerUrl =
-    process.env.OG_INDEXER_URL ?? 'https://indexer-storage-testnet-turbo.0g.ai';
-  const blockchainRpc =
-    process.env.OG_BLOCKCHAIN_RPC ?? 'https://evmrpc-testnet.0g.ai';
-  const privateKey = process.env.OG_PRIVATE_KEY ?? '';
+  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+  const indexerUrl = process.env.OG_INDEXER_URL ?? 'https://indexer-storage-testnet-turbo.0g.ai';
+  const privateKey = process.env.STORAGE_UPLOADER_PRIVATE_KEY ?? process.env.PLATFORM_EXECUTOR_PRIVATE_KEY ?? '';
 
   return {
     async upload(key: string, data: Buffer): Promise<string> {
+      if (!privateKey) {
+        throw new Error('STORAGE_UPLOADER_PRIVATE_KEY (or PLATFORM_EXECUTOR_PRIVATE_KEY) required for real 0G storage');
+      }
       const { Indexer, MemData } = await loadSdk();
       const { ethers } = await import('ethers');
 
-      if (!privateKey) {
-        throw new Error('OG_PRIVATE_KEY env var is required for real 0G storage');
-      }
-
-      const signer = new ethers.Wallet(privateKey, new ethers.JsonRpcProvider(blockchainRpc));
+      const signer = new ethers.Wallet(privateKey, new ethers.JsonRpcProvider(rpcUrl));
       const indexer = new Indexer(indexerUrl);
-
       const file = new MemData(data);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // Cast: @0glabs/0g-ts-sdk bundles CJS ethers; ESM/CJS dual-package hazard.
-      const [result, err] = await indexer.upload(file, blockchainRpc, signer as any);
-      if (err) {
-        throw new Error(`0G upload failed for key "${key}": ${err.message}`);
-      }
+      const [tx, err] = await indexer.upload(file, rpcUrl, signer as any);
+      if (err) throw new Error(`0G upload failed for key "${key}": ${err.message ?? err}`);
 
-      return `0g://${result.rootHash}`;
+      const rootHash: string =
+        (tx && (tx.rootHash || tx.root || tx.hash)) ||
+        (typeof tx === 'string' ? tx : '');
+      if (!rootHash) throw new Error(`0G upload returned no rootHash for key "${key}"`);
+
+      const normalized = rootHash.startsWith('0x') ? rootHash : `0x${rootHash}`;
+      if (!/^0x[a-fA-F0-9]{64}$/.test(normalized)) {
+        throw new Error(`0G upload returned malformed rootHash for key "${key}": ${rootHash}`);
+      }
+      return `og://${normalized}`;
     },
 
     async fetch(uri: string): Promise<Buffer> {
-      if (!uri.startsWith('0g://')) {
-        throw new Error(`Real 0G storage cannot resolve non-0g URI: ${uri}`);
+      if (!uri.startsWith('og://')) {
+        throw new Error(`Real 0G storage cannot resolve non-og URI: ${uri}`);
       }
-
-      const rootHash = uri.slice('0g://'.length);
+      const rootHash = uri.slice('og://'.length);
       const { Indexer } = await loadSdk();
-
       const indexer = new Indexer(indexerUrl);
 
-      const { tmpdir } = await import('node:os');
-      const { randomBytes } = await import('node:crypto');
-      const tmpFile = join(tmpdir(), `og-download-${randomBytes(8).toString('hex')}.bin`);
-
-      const err = await indexer.download(rootHash, tmpFile, /* proof */ false);
-      if (err) {
-        throw new Error(`0G download failed for URI "${uri}": ${err.message}`);
-      }
-
-      const buf = await readFile(tmpFile);
-      import('node:fs').then((fs) => fs.promises.unlink(tmpFile)).catch(() => {}); // best-effort cleanup
-
-      return buf;
+      // downloadToBlob returns [blob, error] — same tuple pattern as upload.
+      const [blob, err] = await indexer.downloadToBlob(rootHash, {});
+      if (err) throw new Error(`0G download failed for URI "${uri}": ${err.message ?? err}`);
+      if (!blob) throw new Error(`0G download returned no blob for URI "${uri}"`);
+      if (typeof blob.arrayBuffer === 'function') return Buffer.from(await blob.arrayBuffer());
+      if (blob instanceof Uint8Array) return Buffer.from(blob);
+      if (Buffer.isBuffer(blob)) return blob;
+      throw new Error(`0G download returned unexpected blob type for URI "${uri}": ${Object.prototype.toString.call(blob)}`);
     },
   };
 }

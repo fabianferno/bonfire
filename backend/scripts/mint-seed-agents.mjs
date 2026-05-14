@@ -173,11 +173,11 @@ async function main() {
       const reservedId = `seed-${t.slug}-${Date.now()}`;
 
       console.log(`  ${label} uploading to 0G Storage…`);
-      const [manifestUri, bundleUri, sealedDEKUri] = await Promise.all([
-        storage.upload(`publicManifest/${reservedId}.json`, Buffer.from(JSON.stringify(manifest), 'utf-8')),
-        storage.upload(`encryptedBundle/${reservedId}.bin`, encryptedBundle),
-        storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK),
-      ]);
+      // Sequential uploads — parallel collides on the uploader wallet's tx nonce
+      // ("replacement transaction underpriced") since each blob requires a Flow contract submission.
+      const manifestUri = await storage.upload(`publicManifest/${reservedId}.json`, Buffer.from(JSON.stringify(manifest), 'utf-8'));
+      const bundleUri = await storage.upload(`encryptedBundle/${reservedId}.bin`, encryptedBundle);
+      const sealedDEKUri = await storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK);
 
       // sealedDEKBaseUri stores the sealed-DEK URI directly; decrypt fetches it as-is.
       const sealedDEKBaseUri = sealedDEKUri;

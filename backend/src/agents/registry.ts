@@ -31,6 +31,10 @@ export interface CreateAgentInput {
   soul?: string;
   /** NOT persisted — proxied to the agent server's /tenants before MongoDB insert. */
   agents?: string;
+  /** NOT persisted — proxied to the agent server's /tenants before MongoDB insert. */
+  env?: Record<string, string>;
+  /** NOT persisted — proxied to the agent server's /tenants before MongoDB insert. */
+  llm?: Record<string, unknown>;
 }
 
 export async function createAgent(db: Db, input: CreateAgentInput): Promise<{ agent: AgentDoc; agentKey: string }> {

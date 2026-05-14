@@ -11,6 +11,15 @@ import { collections } from '../../db/types.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
 
+const TenantLlmOverrideSchema = z.object({
+  provider: z.enum(['openai-compatible', 'zerog']).optional(),
+  baseUrl: z.string().url().optional(),
+  model: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  temperature: z.number().optional(),
+  maxTokens: z.number().optional(),
+});
+
 const CreateAgentBody = z.object({
   name: z.string().min(1).max(64),
   slug: z.string().regex(SLUG_RE),
@@ -22,6 +31,8 @@ const CreateAgentBody = z.object({
   visibility: z.enum(['public', 'unlisted']).default('public'),
   soul: z.string().max(10_000).optional(),
   agents: z.string().max(10_000).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  llm: TenantLlmOverrideSchema.optional(),
 });
 
 const PatchAgentBody = z.object({
@@ -34,6 +45,8 @@ const PatchAgentBody = z.object({
   baseUrl: z.string().url().optional(),
   soul: z.string().max(10_000).optional(),
   agents: z.string().max(10_000).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  llm: TenantLlmOverrideSchema.optional(),
 });
 
 export interface AgentRouteDeps { db: Db; jwtSecret: string; }
@@ -61,21 +74,27 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const parsed = CreateAgentBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
 
-    // If soul/agents provided, create the tenant on the agent first.
-    if (parsed.data.soul || parsed.data.agents) {
+    // If soul/agents/env/llm provided, create the tenant on the agent first.
+    const hasAgentSidePayload = !!(
+      parsed.data.soul || parsed.data.agents || parsed.data.env || parsed.data.llm
+    );
+    if (hasAgentSidePayload) {
       try {
+        const tenantBody: Record<string, unknown> = {
+          slug: parsed.data.slug.toLowerCase(),
+          name: parsed.data.name,
+          description: parsed.data.description,
+          soul: parsed.data.soul ?? '',
+          agents: parsed.data.agents ?? '',
+          tags: parsed.data.tags ?? [],
+          avatarUrl: parsed.data.avatarUrl ?? null,
+        };
+        if (parsed.data.env) tenantBody.env = parsed.data.env;
+        if (parsed.data.llm) tenantBody.llm = parsed.data.llm;
         const tenantRes = await fetch(`${parsed.data.baseUrl}/tenants`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            slug: parsed.data.slug.toLowerCase(),
-            name: parsed.data.name,
-            description: parsed.data.description,
-            soul: parsed.data.soul ?? '',
-            agents: parsed.data.agents ?? '',
-            tags: parsed.data.tags ?? [],
-            avatarUrl: parsed.data.avatarUrl ?? null,
-          }),
+          body: JSON.stringify(tenantBody),
         });
         if (!tenantRes.ok && tenantRes.status !== 409) {
           // 409 = slug already exists on agent (idempotent; treat as ok)
@@ -104,10 +123,11 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const parsed = PatchAgentBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
 
-    // If soul/agents or persona-relevant fields provided, proxy to agent's PATCH /tenants/:slug
+    // If soul/agents/env/llm or persona-relevant fields provided, proxy to agent's PATCH /tenants/:slug
     if (
       parsed.data.soul !== undefined || parsed.data.agents !== undefined ||
-      parsed.data.description !== undefined || parsed.data.name !== undefined
+      parsed.data.description !== undefined || parsed.data.name !== undefined ||
+      parsed.data.env !== undefined || parsed.data.llm !== undefined
     ) {
       const baseUrl = parsed.data.baseUrl ?? a.baseUrl;
       const tenantPatch: Record<string, unknown> = {};
@@ -117,6 +137,8 @@ export function agentRoutes(deps: AgentRouteDeps) {
       if (parsed.data.agents !== undefined) tenantPatch.agents = parsed.data.agents;
       if (parsed.data.avatarUrl !== undefined) tenantPatch.avatarUrl = parsed.data.avatarUrl;
       if (parsed.data.tags !== undefined) tenantPatch.tags = parsed.data.tags;
+      if (parsed.data.env !== undefined) tenantPatch.env = parsed.data.env;
+      if (parsed.data.llm !== undefined) tenantPatch.llm = parsed.data.llm;
       try {
         const tenantRes = await fetch(`${baseUrl}/tenants/${a.slug}`, {
           method: 'PATCH',

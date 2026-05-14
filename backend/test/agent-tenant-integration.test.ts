@@ -264,6 +264,68 @@ describe('agent-tenant integration', () => {
     expect(patch.status).toBe(403);
   });
 
+  it('POST /v1/agents with env and llm calls agent POST /tenants with those fields', async () => {
+    const app = await makeApp(tdb.db);
+    const me = await registerAndLogin(app);
+
+    const res = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'Env Agent',
+      slug: 'env-agent',
+      baseUrl: `http://127.0.0.1:${port}`,
+      description: 'Env override test',
+      tags: [],
+      visibility: 'public',
+      soul: 'You are Env Agent.',
+      agents: '',
+      env: { DUMMY_KEY: 'dummy_value', ANOTHER: 'x' },
+      llm: { provider: 'openai-compatible', temperature: 0.3, model: 'gpt-4o' },
+    }, me.token);
+
+    expect(res.status).toBe(201);
+    expect(res.body.agent.slug).toBe('env-agent');
+
+    const postCalls = fake.tenantCalls.filter(c => c.method === 'POST');
+    const myCall = postCalls.find(c => c.body.slug === 'env-agent');
+    expect(myCall).toBeTruthy();
+    expect(myCall!.body.env).toEqual({ DUMMY_KEY: 'dummy_value', ANOTHER: 'x' });
+    expect(myCall!.body.llm).toEqual({ provider: 'openai-compatible', temperature: 0.3, model: 'gpt-4o' });
+
+    const get = await jsonReq(app, 'GET', '/v1/agents/env-agent');
+    expect(get.status).toBe(200);
+    expect(get.body.agent).not.toHaveProperty('env');
+    expect(get.body.agent).not.toHaveProperty('llm');
+  });
+
+  it('PATCH /v1/agents/:aid with new env calls agent PATCH /tenants/:slug with env', async () => {
+    const app = await makeApp(tdb.db);
+    const me = await registerAndLogin(app);
+
+    const create = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'Env Patcher',
+      slug: 'env-patcher',
+      baseUrl: `http://127.0.0.1:${port}`,
+      description: 'Env patch test',
+      tags: [],
+      visibility: 'public',
+    }, me.token);
+    expect(create.status).toBe(201);
+
+    const lenBefore = fake.tenantCalls.length;
+    const patch = await jsonReq(app, 'PATCH', `/v1/agents/${create.body.agent.id}`, {
+      env: { NEW_VAR: 'new_value' },
+    }, me.token);
+    expect(patch.status).toBe(200);
+
+    const newCalls = fake.tenantCalls.slice(lenBefore);
+    const patchCall = newCalls.find(c => c.method === 'PATCH');
+    expect(patchCall).toBeTruthy();
+    expect(patchCall!.slug).toBe('env-patcher');
+    expect(patchCall!.body.env).toEqual({ NEW_VAR: 'new_value' });
+    expect(patchCall!.body).not.toHaveProperty('soul');
+    expect(patchCall!.body).not.toHaveProperty('agents');
+    expect(patchCall!.body).not.toHaveProperty('llm');
+  });
+
   it('cascade invocation passes tenant: agent.slug to the agent /chat/message', async () => {
     const app = await makeApp(tdb.db);
     const me = await registerAndLogin(app);

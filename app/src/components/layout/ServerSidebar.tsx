@@ -138,7 +138,19 @@ export default function ServerSidebar() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white leading-none truncate">{user.username}</p>
-              <p className="text-xs leading-none mt-0.5 truncate" style={{ color: "var(--bf-gray)" }}>{user.discriminator}</p>
+              {user.walletAddress ? (
+                <button
+                  type="button"
+                  title={`Click to copy ${user.walletAddress}`}
+                  onClick={() => navigator.clipboard?.writeText(user.walletAddress!)}
+                  className="text-xs leading-none mt-0.5 truncate font-mono hover:underline text-left"
+                  style={{ color: "var(--bf-gray)" }}
+                >
+                  {user.walletAddress.slice(0, 6)}…{user.walletAddress.slice(-4)}
+                </button>
+              ) : (
+                <p className="text-xs leading-none mt-0.5 truncate" style={{ color: "var(--bf-gray)" }}>{user.discriminator}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-0.5 flex-shrink-0">

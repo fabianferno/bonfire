@@ -35,9 +35,12 @@ export async function decryptAgentBundle(opts: {
   const hit = cache.get(cacheKey);
   if (hit) return hit;
 
+  // sealedDEKBaseUri historically tried to be a directory URI with `/shared.bin`
+  // appended at fetch time, but real-world URI schemes (incl. our mock) don't
+  // preserve path structure cleanly. v1 stores the sealed-DEK file URI directly.
   const [encryptedBundle, sealedDEK] = await Promise.all([
     storage.fetch(agent.bundleUri),
-    storage.fetch(`${agent.sealedDEKBaseUri}/shared.bin`),
+    storage.fetch(agent.sealedDEKBaseUri),
   ]);
 
   const expectedRaw = agent.bundleHash.toLowerCase();

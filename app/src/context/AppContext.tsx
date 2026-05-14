@@ -264,6 +264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         username: authUser.displayName || authUser.username,
         discriminator: "#0001",
         avatar: authUser.avatarUrl ?? undefined,
+        walletAddress: authUser.walletAddress ?? undefined,
       }
     : { id: "", username: "You", discriminator: "#0001" };
 

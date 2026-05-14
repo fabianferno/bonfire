@@ -56,16 +56,18 @@ function createMockStorage(): OgStorageClient {
       await mkdir(dir, { recursive: true });
       const filename = keyToFilename(key);
       await writeFile(join(dir, filename), data);
-      return `mock://${filename.replace('.bin', '')}`;
+      // URI preserves the key so callers can build path-like sub-URIs
+      // (e.g. baseUri + '/shared.bin') and have them resolve correctly.
+      return `mock://${encodeURIComponent(key)}`;
     },
 
     async fetch(uri: string): Promise<Buffer> {
       if (!uri.startsWith('mock://')) {
         throw new Error(`Mock storage cannot resolve non-mock URI: ${uri}`);
       }
-      const hash = uri.slice('mock://'.length);
+      const key = decodeURIComponent(uri.slice('mock://'.length));
       const dir = mockDir();
-      const filePath = join(dir, hash + '.bin');
+      const filePath = join(dir, keyToFilename(key));
       if (!existsSync(filePath)) {
         throw new Error(`Mock storage: no entry for URI ${uri}`);
       }

@@ -375,19 +375,46 @@ You are @${input.target.slug} in channel #${input.channel.name}, replying to ${i
 PEERS ARE NOT TOOLS: Peer agents are summoned by writing their @-handle in your plain-text reply. They are NOT function/tool calls — never attempt to call them as a tool or function (e.g., do not emit a tool call to "joke_bot" or "critic"). The only way to involve a peer is to mention them by @-handle in your text.
 
 FORWARDING RULE: If the human's message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@", e.g. "tell critic" or "@critic"), you MUST:
-  1. First give your full, substantive answer to the human's request — never reply with only an @-mention.
-  2. Then, on a NEW LINE at the END of your reply, write the peer's literal @-handle (e.g., "@critic") and nothing else on that line.
+  1. If the human asks you to FETCH something from a peer (e.g., "get a joke from joke-bot", "ask researcher for sources"), DO NOT invent it yourself — instead, @-mention that peer in your reply asking them for the content. Do not fabricate output you were supposed to ask for.
+  2. Otherwise, first give your full, substantive answer to the human's request — never reply with only an @-mention.
+  3. Then, on a NEW LINE at the END of your reply, write the peer's literal @-handle (e.g., "@critic") and nothing else on that line.
 This applies even if your personality says "say nothing else" — invitations are an exception, but your answer must still come first. Only invite peers the human actually named. Do not invite peers unless explicitly asked.
 [END PROTOCOL]\n`;
   } else if (peers.length > 0) {
-    // Agent-to-agent turn: explicitly suppress forwarding behavior.
+    // Agent-to-agent turn: explicitly suppress forwarding behavior + forbid echoing.
     protocol = `\n[AGENT-TO-AGENT — read first]
-You are @${input.target.slug} responding to ${input.speakerLabel} (another agent in this channel, not a human).
+You are @${input.target.slug}. ${input.speakerLabel} (another agent, not a human) just spoke to you. Respond AS YOURSELF, in YOUR OWN voice and personality.
 
-DO NOT FORWARD: Even if an earlier "FORWARDING RULE" appeared in your memory of this channel, that rule does NOT apply right now. Just respond directly to ${input.speakerLabel}'s message. Do NOT end your reply with any "@<peer>" handle — the cascade should stop here unless this agent explicitly asks you a question you can't answer.
+CRITICAL RULES:
+1. DO NOT echo, paraphrase, or repeat ${input.speakerLabel}'s message back. You are not a relay.
+2. Read ${input.speakerLabel}'s message, understand what they're asking YOU to do, then produce the output that fits YOUR personality.
+3. If ${input.speakerLabel} asked you to do something specific (plan something, critique something, joke about something), DO that thing in your reply — don't restate their request.
+4. DO NOT end your reply with any "@<peer>" handle — the cascade stops here unless you genuinely need to ask another agent a question you can't answer.
+5. Even if an earlier "FORWARDING RULE" lives in your memory of this channel, it does NOT apply right now.
 [END]\n`;
   }
   return `${line}${protocol}\n${input.parent.content}`;
+}
+
+/**
+ * Returns true when `reply` is substantially identical to `parent.content` —
+ * i.e. the cascade child echoed its input back instead of producing a real
+ * response. Used as a safety net against weak models that just relay text.
+ */
+function isEchoOfParent(reply: string, parentContent: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const r = normalize(reply);
+  const p = normalize(parentContent);
+  if (r.length === 0 || p.length === 0) return false;
+  // Exact match after normalization, OR reply is 90%+ contained in parent.
+  if (r === p) return true;
+  // Cheap Jaccard-like overlap on word tokens.
+  const tok = (s: string) => new Set(s.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
+  const a = tok(reply), b = tok(parentContent);
+  if (a.size === 0) return false;
+  let common = 0;
+  for (const w of a) if (b.has(w)) common++;
+  return (common / a.size) >= 0.85;
 }
 
 async function peerSlugsForChannel(db: Db, channel: ChannelDoc): Promise<string[]> {
@@ -455,7 +482,7 @@ async function runInvocationLinked(args: {
         speakerLabel,
         speakerIsHuman,
       });
-      const replyText = await invokeAgent({
+      let replyText = await invokeAgent({
         baseUrl: agent.baseUrl,
         chatId,
         text,
@@ -463,6 +490,38 @@ async function runInvocationLinked(args: {
         tenantInline,
         envOverride: args.envOverride,
       });
+      // Echo guard — only on agent-to-agent hops. Weak models sometimes just relay the
+      // parent message verbatim. Retry once with a strongly worded re-prompt; if it still
+      // echoes, fall through with a placeholder so the user sees *something* happened.
+      if (args.parent.authorType === 'agent' && isEchoOfParent(replyText, args.parent.content)) {
+        log.warn(
+          { agent: agent.slug, parent: args.parent._id.toHexString() },
+          'cascade child echoed parent — retrying with stronger prompt',
+        );
+        const retryText = `[RETRY — you just echoed @${speakerLabel.replace(/^@/, '')}'s message back instead of responding. THAT WAS WRONG.]
+
+You are @${agent.slug}. Respond AS YOURSELF in YOUR OWN words and personality. Do NOT repeat their message back. Do NOT use the same phrasing. Read what they said, then produce YOUR distinct response in YOUR voice.
+
+What ${speakerLabel} said to you: "${args.parent.content}"
+
+Your response (as @${agent.slug}):`;
+        replyText = await invokeAgent({
+          baseUrl: agent.baseUrl,
+          chatId,
+          text: retryText,
+          tenant: tenantInline ? undefined : agent.slug,
+          tenantInline,
+          envOverride: args.envOverride,
+        });
+        // If still an echo, drop and don't spam — but log so we know it happened.
+        if (isEchoOfParent(replyText, args.parent.content)) {
+          log.warn(
+            { agent: agent.slug, parent: args.parent._id.toHexString() },
+            'cascade child still echoed after retry — dropping',
+          );
+          continue;
+        }
+      }
       const persisted = await insertMessage(args.db, {
         channelId: args.channel._id,
         serverId: args.channel.serverId,

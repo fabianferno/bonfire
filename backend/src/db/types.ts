@@ -23,6 +23,7 @@ export interface AgentDoc {
   tags: string[];
   baseUrl: string;
   visibility: 'public' | 'unlisted';
+  agentKeyHash?: string | null;
   createdBy: ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -59,6 +60,7 @@ export interface ChannelDoc {
   type: 'text';
   defaultAgentId: ObjectId | null;
   position: number;
+  cascadeEnabled?: boolean;
   createdAt: Date;
 }
 
@@ -73,6 +75,9 @@ export interface MessageDoc {
   content: string;
   mentions: MessageMention[];
   replyToId: ObjectId | null;
+  parentMessageId?: ObjectId | null;
+  cascadeRootId?: ObjectId;
+  cascadeHop?: number;
   createdAt: Date;
   editedAt: Date | null;
 }

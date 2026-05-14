@@ -32,5 +32,6 @@ export async function createIndexes(db: Db): Promise<void> {
   await db.collection(collections.messages).createIndexes([
     { key: { channelId: 1, createdAt: -1 }, name: 'channelId_1_createdAt_-1' },
     { key: { serverId: 1, createdAt: -1 }, name: 'serverId_1_createdAt_-1' },
+    { key: { cascadeRootId: 1, createdAt: 1 }, name: 'cascadeRootId_1_createdAt_1' },
   ]);
 }

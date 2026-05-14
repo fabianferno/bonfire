@@ -24,6 +24,12 @@ describe('createIndexes', () => {
     await expect(createIndexes(tdb.db)).resolves.not.toThrow();
   });
 
+  it('creates the cascade tree index on messages', async () => {
+    await createIndexes(tdb.db);
+    const msgIdx = await tdb.db.collection('messages').indexes();
+    expect(msgIdx.map(i => i.name)).toContain('cascadeRootId_1_createdAt_1');
+  });
+
   it('enforces unique username case-insensitively', async () => {
     await createIndexes(tdb.db);
     const users = tdb.db.collection('users');

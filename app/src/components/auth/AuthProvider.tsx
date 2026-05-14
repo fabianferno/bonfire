@@ -42,19 +42,16 @@ interface AuthMeResponse {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  // Initialise token from localStorage synchronously (safe — runs only on client).
-  // This avoids calling setState inside an effect for the "no token" fast-path.
-  const [token, setTokenState] = useState<string | null>(() =>
-    typeof window !== 'undefined' ? getToken() : null,
-  );
-  // If there is no stored token we can start as 'guest' immediately.
-  const [status, setStatus] = useState<AuthStatus>(() =>
-    typeof window !== 'undefined' && getToken() ? 'unknown' : 'guest',
-  );
+  // Start identical on server and client to avoid hydration mismatch.
+  // The real token (from localStorage) is loaded in useEffect, post-hydration.
+  const [token, setTokenState] = useState<string | null>(null);
+  const [status, setStatus] = useState<AuthStatus>('unknown');
 
-  // On mount, attempt to restore session from localStorage only when a token exists.
+  // On mount (client only): read token, attempt /me, settle into authenticated/guest.
   useEffect(() => {
-    if (!token) return;
+    const t = getToken();
+    if (!t) { setStatus('guest'); return; }
+    setTokenState(t);
 
     api<AuthMeResponse>('GET', '/v1/auth/me')
       .then(({ user: me }) => {
@@ -69,7 +66,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Non-401 errors: keep the token so a retry could work.
         setStatus('guest');
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = useCallback(async (emailOrUsername: string, password: string) => {

@@ -237,7 +237,15 @@ export interface PrepareInvocationInput {
 
 export function prepareInvocationText(input: PrepareInvocationInput): string {
   const line = channelContextLine(input);
-  return `${line}\n${input.parent.content}`;
+  const peers = input.peerSlugs.filter(s => s !== input.target.slug).map(s => '@' + s);
+  const protocol = peers.length > 0
+    ? `\n[CHANNEL PROTOCOL — read first]
+You are @${input.target.slug} in channel #${input.channel.name}, replying to ${input.speakerLabel}. Other agents in this channel: ${peers.join(', ')}.
+
+FORWARDING RULE: If the message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@"), end your reply with a line containing only that peer's @-handle (e.g., "@critic"). This rule applies even when your personality says "say nothing else" or "be terse" — invitations are an exception. Do this even if the peer name appears without the @ sign in the user's message. Only invite peers the user actually named.
+[END PROTOCOL]\n`
+    : '';
+  return `${line}${protocol}\n${input.parent.content}`;
 }
 
 async function peerSlugsForChannel(db: Db, channel: ChannelDoc): Promise<string[]> {

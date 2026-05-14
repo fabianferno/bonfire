@@ -1,20 +1,34 @@
 "use client";
 
-import { Mic, MicOff } from "lucide-react";
+import { Mic, MicOff, X } from "lucide-react";
 import Avatar from "@/components/shared/Avatar";
 import type { VoiceParticipantInfo } from "./useVoiceCall";
 
 interface Props {
   participant: VoiceParticipantInfo;
+  /** Called when the user clicks the kick button on a bot tile. Only rendered when provided. */
+  onKick?: () => void;
 }
 
-export default function VoiceParticipantTile({ participant }: Props) {
+export default function VoiceParticipantTile({ participant, onKick }: Props) {
   const { name, isLocal, isAgent, audioLevel, muted } = participant;
   const isSpeaking = audioLevel > 0.01;
 
   return (
-    <div className="flex flex-col items-center gap-3 p-5 rounded-2xl select-none"
+    <div className="relative flex flex-col items-center gap-3 p-5 rounded-2xl select-none group"
       style={{ background: "var(--bf-secondary)" }}>
+
+      {/* Kick button — top-right corner, only for bot tiles when onKick is provided */}
+      {isAgent && onKick && (
+        <button
+          onClick={onKick}
+          title="Remove bot"
+          className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:opacity-80"
+          style={{ background: "var(--bf-quinary)", color: "var(--bf-red)" }}
+        >
+          <X size={12} />
+        </button>
+      )}
 
       {/* Avatar with speaking pulse ring */}
       <div className="relative">

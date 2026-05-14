@@ -40,6 +40,18 @@ export interface AgentDoc {
   bundleHash?: string;            // hex string
 }
 
+/**
+ * A single bot that has been invited into an active voice session.
+ * Each invite spawns its own Pipecat subprocess.
+ */
+export interface VoiceBotEntry {
+  agentDocId: ObjectId;
+  agentSlug: string;
+  pid: number;
+  invitedByUserId: ObjectId;
+  invitedAt: Date;
+}
+
 // TTL-cleaned up via the expiresAt Mongo TTL index.
 export interface MintReservationDoc {
   _id: ObjectId;
@@ -105,14 +117,17 @@ export interface VoiceSessionDoc {
   serverId: ObjectId;
   dailyRoomName: string;       // unique room name
   dailyRoomUrl: string;        // https://<domain>.daily.co/<roomName>
-  agentSlug: string | null;    // resolved persona (defaultAgentId or fallback)
-  agentSoul: string;           // decrypted SOUL injected to Python bot
   participantIds: ObjectId[];  // active user IDs (Mongo refs)
-  pythonPid: number | null;    // subprocess PID (null if bot died)
   status: 'starting' | 'active' | 'ended';
   startedAt: Date;
   expiresAt: Date;             // startedAt + 10 minutes
   endedAt: Date | null;
+  // DEPRECATED — kept for backwards compat with old rows; do not write on new sessions
+  pythonPid?: number | null;
+  agentSlug?: string | null;
+  agentSoul?: string;
+  // NEW — each invited bot has its own entry; empty by default
+  bots: VoiceBotEntry[];
 }
 
 export interface MessageMention { type: PrincipalType; id: ObjectId; }

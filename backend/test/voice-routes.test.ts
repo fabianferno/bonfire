@@ -6,10 +6,12 @@
  * Scenarios:
  *  - 200 on join (voice channel)
  *  - 200 on leave
- *  - 200 on status (active + inactive)
+ *  - 200 on status (active + inactive, bots field included)
  *  - 409 on join when channel.type !== 'voice'
  *  - 503 when VoiceManager throws BotSpawnError
  *  - 401 without auth token
+ *  - POST /invite-agent → 200, 404 (no session), 404 (no agent), 400 (non-INFT), 409 (duplicate)
+ *  - POST /kick-agent → 200, 404
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
@@ -20,16 +22,14 @@ import { makeApp, jsonReq, TEST_JWT_SECRET } from './helpers/app.js';
 import { registerAndLogin } from './helpers/auth.js';
 import { createIndexes } from '../src/db/indexes.js';
 import { voiceRoutes } from '../src/api/routes/voice.js';
-import { VoiceManager, BotSpawnError } from '../src/voice/manager.js';
-import type { ChannelDoc, VoiceSessionDoc } from '../src/db/types.js';
+import { VoiceManager, BotSpawnError, AgentAlreadyInvitedError } from '../src/voice/manager.js';
+import type { ChannelDoc, VoiceSessionDoc, AgentDoc, VoiceBotEntry } from '../src/db/types.js';
 import { collections } from '../src/db/types.js';
 
 // ── Fake VoiceManager ────────────────────────────────────────────────────────
 
-function makeFakeVoiceManager(db: any) {
-  // Track calls for assertions
+function makeFakeVoiceManager(_db: any) {
   const calls: { method: string; args: any[] }[] = [];
-
   const sessionStore = new Map<string, VoiceSessionDoc>();
 
   const manager = {
@@ -44,7 +44,8 @@ function makeFakeVoiceManager(db: any) {
         agentSlug: null,
         agentSoul: '',
         participantIds: [user._id],
-        pythonPid: 1234,
+        pythonPid: null,
+        bots: [],
         status: 'active',
         startedAt: new Date(),
         expiresAt: new Date(Date.now() + 600_000),
@@ -57,8 +58,23 @@ function makeFakeVoiceManager(db: any) {
       calls.push({ method: 'leaveChannel', args: [sessionId, user] });
       return { ended: true };
     },
-    async status(channelId: ObjectId) {
-      calls.push({ method: 'status', args: [channelId] });
+    async inviteAgent({ session, agent, invitedBy }: any) {
+      calls.push({ method: 'inviteAgent', args: [session, agent, invitedBy] });
+      const bot: VoiceBotEntry = {
+        agentDocId: agent._id,
+        agentSlug: agent.slug,
+        pid: 5000,
+        invitedByUserId: invitedBy._id,
+        invitedAt: new Date(),
+      };
+      return { bot };
+    },
+    async kickAgent({ session, agentSlug, requestedBy }: any) {
+      calls.push({ method: 'kickAgent', args: [session, agentSlug, requestedBy] });
+      return { removed: true };
+    },
+    async status(_channelId: ObjectId) {
+      calls.push({ method: 'status', args: [_channelId] });
       return null;
     },
     async sweep() { return 0; },
@@ -75,6 +91,8 @@ function makeFailingVoiceManager() {
       throw new BotSpawnError('python exploded');
     },
     async leaveChannel() { return { ended: false }; },
+    async inviteAgent() { throw new BotSpawnError('spawn failed'); },
+    async kickAgent() { return { removed: false }; },
     async status() { return null; },
     async sweep() { return 0; },
     async shutdown() {},
@@ -86,7 +104,6 @@ function makeFailingVoiceManager() {
 async function makeVoiceApp(db: any, voiceManager: VoiceManager) {
   await createIndexes(db);
   const baseApp = makeApp(db);
-  // Build a fresh app that includes voice routes
   const { buildApp } = await import('../src/api/server.js');
   return buildApp({
     db,
@@ -115,6 +132,53 @@ async function seedChannel(db: any, overrides: Partial<ChannelDoc> = {}): Promis
   return doc;
 }
 
+async function seedAgent(db: any, overrides: Partial<AgentDoc> = {}): Promise<AgentDoc> {
+  const slug = overrides.slug ?? `agent-${Math.random().toString(36).slice(2, 8)}`;
+  const doc: AgentDoc = {
+    _id: new ObjectId(),
+    name: slug,
+    slug,
+    avatarUrl: null,
+    description: 'test agent',
+    bio: null,
+    tags: [],
+    baseUrl: 'https://example.com',
+    visibility: 'public',
+    createdBy: new ObjectId(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    tokenId: '42',
+    contractAddress: '0xdeadbeef',
+    ...overrides,
+  } as AgentDoc;
+  await db.collection(collections.agents).insertOne(doc);
+  return doc;
+}
+
+async function seedActiveSession(
+  db: any,
+  channelId: ObjectId,
+  serverId: ObjectId,
+  userId: ObjectId,
+  botEntries: VoiceBotEntry[] = [],
+): Promise<VoiceSessionDoc> {
+  const doc: VoiceSessionDoc = {
+    _id: new ObjectId(),
+    channelId,
+    serverId,
+    dailyRoomName: 'seeded-room',
+    dailyRoomUrl: 'https://test.daily.co/seeded-room',
+    participantIds: [userId],
+    bots: botEntries,
+    status: 'active',
+    startedAt: new Date(),
+    expiresAt: new Date(Date.now() + 600_000),
+    endedAt: null,
+  };
+  await db.collection(collections.voiceSessions).insertOne(doc);
+  return doc;
+}
+
 async function addUserToServer(db: any, userId: ObjectId, serverId: ObjectId) {
   await db.collection(collections.serverMembers).insertOne({
     _id: new ObjectId(),
@@ -135,8 +199,7 @@ describe('voice routes', () => {
 
   beforeAll(async () => { tdb = await startTestDb(); });
   afterAll(async () => {
-    // Drain any fire-and-forget Mongo ops kicked off by route handlers
-    // (e.g. session-mutation logging that fires after the HTTP response).
+    // Drain any fire-and-forget Mongo ops kicked off by route handlers.
     await new Promise((r) => setTimeout(r, 200));
     await stopTestDb();
   });
@@ -171,7 +234,6 @@ describe('voice routes', () => {
     const app = await makeVoiceApp(tdb.db, fakeManager);
 
     const { token, user } = await registerAndLogin(app);
-    // Seed a text channel
     const channel = await seedChannel(tdb.db, { type: 'text' } as any);
     await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
 
@@ -202,7 +264,6 @@ describe('voice routes', () => {
     const channel = await seedChannel(tdb.db);
 
     const r = await jsonReq(app, 'POST', `/v1/channels/${channel._id.toHexString()}/voice/join`, {});
-    // 401 or 503 (if Privy not configured in test); either means auth rejected
     expect([401, 503]).toContain(r.status);
   });
 
@@ -216,7 +277,6 @@ describe('voice routes', () => {
     const channel = await seedChannel(tdb.db, { type: 'voice' });
     await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
 
-    // First join to get a sessionId
     const joinRes = await jsonReq(app, 'POST', `/v1/channels/${channel._id.toHexString()}/voice/join`, {}, token);
     const sessionId = joinRes.body.sessionId;
 
@@ -256,22 +316,26 @@ describe('voice routes', () => {
     expect(r.body.active).toBe(false);
   });
 
-  // ── GET /status — active session ─────────────────────────────────────────
+  // ── GET /status — active session with bots ────────────────────────────────
 
-  it('GET /status returns active: true with session details when session exists', async () => {
-    // Make manager.status return an active session
+  it('GET /status returns active: true with bots[] in the response', async () => {
     const channelId = new ObjectId();
     const sessionId = new ObjectId();
+    const botEntry: VoiceBotEntry = {
+      agentDocId: new ObjectId(),
+      agentSlug: 'invited-agent',
+      pid: 7777,
+      invitedByUserId: new ObjectId(),
+      invitedAt: new Date(),
+    };
     const mockSession: VoiceSessionDoc = {
       _id: sessionId,
       channelId,
       serverId: new ObjectId(),
       dailyRoomName: 'active-room',
       dailyRoomUrl: 'https://test.daily.co/active-room',
-      agentSlug: null,
-      agentSoul: '',
       participantIds: [new ObjectId()],
-      pythonPid: 9999,
+      bots: [botEntry],
       status: 'active',
       startedAt: new Date(),
       expiresAt: new Date(Date.now() + 300_000),
@@ -281,6 +345,8 @@ describe('voice routes', () => {
     const activeManager = {
       async joinChannel() { return { session: mockSession, userToken: 'tok' }; },
       async leaveChannel() { return { ended: false }; },
+      async inviteAgent() { return { bot: botEntry }; },
+      async kickAgent() { return { removed: false }; },
       async status(_cid: ObjectId) { return mockSession; },
       async sweep() { return 0; },
       async shutdown() {},
@@ -297,5 +363,209 @@ describe('voice routes', () => {
     expect(r.body.active).toBe(true);
     expect(r.body.sessionId).toBe(sessionId.toHexString());
     expect(r.body.participantCount).toBe(1);
+    expect(Array.isArray(r.body.bots)).toBe(true);
+    expect(r.body.bots).toHaveLength(1);
+    expect(r.body.bots[0].agentSlug).toBe('invited-agent');
+  });
+
+  // ── POST /invite-agent — happy path ──────────────────────────────────────
+
+  it('POST /invite-agent returns 200 with bot entry on success', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const agent = await seedAgent(tdb.db, { slug: 'invited-bot', tokenId: '99' });
+    const session = await seedActiveSession(tdb.db, channel._id, channel.serverId, new ObjectId(user.id));
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/invite-agent`,
+      { sessionId: session._id.toHexString(), agentSlug: agent.slug },
+      token,
+    );
+
+    expect(r.status).toBe(200);
+    expect(r.body.bot.agentSlug).toBe(agent.slug);
+    expect(r.body.bot.invitedAt).toBeTruthy();
+    expect(r.body.bot.agentDocId).toMatch(/^[a-f0-9]{24}$/);
+  });
+
+  // ── POST /invite-agent — session not found → 404 ─────────────────────────
+
+  it('POST /invite-agent returns 404 when session does not exist', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const agent = await seedAgent(tdb.db);
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/invite-agent`,
+      { sessionId: new ObjectId().toHexString(), agentSlug: agent.slug },
+      token,
+    );
+
+    expect(r.status).toBe(404);
+    expect(r.body.error).toBe('session_not_found');
+  });
+
+  // ── POST /invite-agent — agent not found → 404 ───────────────────────────
+
+  it('POST /invite-agent returns 404 when agent slug does not exist', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const session = await seedActiveSession(tdb.db, channel._id, channel.serverId, new ObjectId(user.id));
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/invite-agent`,
+      { sessionId: session._id.toHexString(), agentSlug: 'no-such-agent' },
+      token,
+    );
+
+    expect(r.status).toBe(404);
+    expect(r.body.error).toBe('agent_not_found');
+  });
+
+  // ── POST /invite-agent — non-INFT agent → 400 ────────────────────────────
+
+  it('POST /invite-agent returns 400 for a non-INFT-backed agent', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    // Agent with no tokenId — not INFT-backed
+    const agent = await seedAgent(tdb.db, { slug: 'plain-agent', tokenId: undefined });
+    const session = await seedActiveSession(tdb.db, channel._id, channel.serverId, new ObjectId(user.id));
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/invite-agent`,
+      { sessionId: session._id.toHexString(), agentSlug: agent.slug },
+      token,
+    );
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('agent_not_invitable');
+  });
+
+  // ── POST /invite-agent — duplicate → 409 ─────────────────────────────────
+
+  it('POST /invite-agent returns 409 when agent is already in the session', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const agent = await seedAgent(tdb.db, { slug: 'dupe-bot', tokenId: '7' });
+
+    // Pre-seed session with this agent already in bots[]
+    const botEntry: VoiceBotEntry = {
+      agentDocId: agent._id,
+      agentSlug: agent.slug,
+      pid: 1111,
+      invitedByUserId: new ObjectId(user.id),
+      invitedAt: new Date(),
+    };
+    const session = await seedActiveSession(
+      tdb.db,
+      channel._id,
+      channel.serverId,
+      new ObjectId(user.id),
+      [botEntry],
+    );
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/invite-agent`,
+      { sessionId: session._id.toHexString(), agentSlug: agent.slug },
+      token,
+    );
+
+    expect(r.status).toBe(409);
+    expect(r.body.error).toBe('agent_already_in_room');
+  });
+
+  // ── POST /kick-agent — happy path ─────────────────────────────────────────
+
+  it('POST /kick-agent returns 200 with removed: true', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const agent = await seedAgent(tdb.db, { slug: 'kick-bot', tokenId: '5' });
+    const botEntry: VoiceBotEntry = {
+      agentDocId: agent._id,
+      agentSlug: agent.slug,
+      pid: 3333,
+      invitedByUserId: new ObjectId(user.id),
+      invitedAt: new Date(),
+    };
+    const session = await seedActiveSession(
+      tdb.db,
+      channel._id,
+      channel.serverId,
+      new ObjectId(user.id),
+      [botEntry],
+    );
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/kick-agent`,
+      { sessionId: session._id.toHexString(), agentSlug: agent.slug },
+      token,
+    );
+
+    expect(r.status).toBe(200);
+    expect(r.body.removed).toBe(true);
+  });
+
+  // ── POST /kick-agent — session not found → 404 ───────────────────────────
+
+  it('POST /kick-agent returns 404 when session does not exist', async () => {
+    const fakeManager = makeFakeVoiceManager(tdb.db);
+    const app = await makeVoiceApp(tdb.db, fakeManager);
+
+    const { token, user } = await registerAndLogin(app);
+    const channel = await seedChannel(tdb.db, { type: 'voice' });
+    await addUserToServer(tdb.db, new ObjectId(user.id), channel.serverId);
+
+    const r = await jsonReq(
+      app,
+      'POST',
+      `/v1/channels/${channel._id.toHexString()}/voice/kick-agent`,
+      { sessionId: new ObjectId().toHexString(), agentSlug: 'any-bot' },
+      token,
+    );
+
+    expect(r.status).toBe(404);
+    expect(r.body.error).toBe('session_not_found');
   });
 });

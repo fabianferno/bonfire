@@ -14,6 +14,7 @@ import { TelegramAdapter } from './channels/telegram.js';
 import { startApi } from './api/server.js';
 import { ensureLearnSkill } from './skills/bootstrap.js';
 import { startEvolutionLoop } from './evolution/loop.js';
+import { TenantRegistry } from './tenants/registry.js';
 import { log } from './util/logger.js';
 
 async function main() {
@@ -22,6 +23,13 @@ async function main() {
   log.info({ agentDir }, 'boot');
 
   const loaded = await loadAgent(agentDir);
+
+  // Initialize tenant registry — data/ lives next to the package root (one level up from src/ or dist/)
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const tenantsFile = path.resolve(here, '..', 'data', 'tenants.json');
+  const tenantRegistry = new TenantRegistry(tenantsFile);
+  await tenantRegistry.load();
+  const stopTenantWatcher = tenantRegistry.watch();
 
   await ensureLearnSkill(agentDir);
 
@@ -47,6 +55,7 @@ async function main() {
     loaded, model, embedModel, store,
     getSkills: () => skills,
     getTools: () => buildToolRegistry(loaded.config, mcpHandles),
+    tenantRegistry,
   });
 
   const web = new WebChatAdapter();
@@ -57,7 +66,6 @@ async function main() {
 
   const port = Number(process.env.AGENT_API_PORT ?? 7777);
   // Resolve public/ relative to this file (works both for src/ and dist/)
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const publicDir = path.resolve(here, '..', 'public');
 
   const stopEvolution = startEvolutionLoop({
@@ -82,6 +90,7 @@ async function main() {
     getConfig: () => loaded.config,
     patchConfig: async (p) => { Object.assign(loaded.config, p); },
     patchTelegram: async (p) => { Object.assign(loaded.config.channels.telegram, p); await telegram.stop(); telegram.start((m) => runtime.handle(m)); },
+    tenantRegistry,
   });
 
   log.info({ port, skills: skills.length, mcp: mcpHandles.length, web: true, telegram: loaded.config.channels.telegram.enabled }, 'ready');
@@ -90,6 +99,7 @@ async function main() {
     log.info('SIGTERM: graceful shutdown');
     stopEvolution();
     stopWatcher();
+    stopTenantWatcher();
     await telegram.stop();
     await web.stop();
     for (const h of mcpHandles) await h.close();

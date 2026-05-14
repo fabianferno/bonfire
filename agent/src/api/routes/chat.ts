@@ -14,9 +14,9 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
   });
 
   app.post('/chat/message', async (c) => {
-    const { userId = 'anonymous', text } = await c.req.json();
+    const { userId = 'anonymous', text, tenant, envOverride } = await c.req.json();
     if (!text) return c.json({ error: 'text required' }, 400);
-    const streamId = await web.enqueue(userId, text);
+    const streamId = await web.enqueue(userId, text, tenant ?? undefined, envOverride ?? undefined);
     return c.json({ streamId });
   });
 
@@ -25,7 +25,10 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
     return stream(c, async (s) => {
       let unsub = () => {};
       await new Promise<void>((resolve) => {
-        unsub = web.subscribe(id, (chunk) => { s.write(`data: ${JSON.stringify({ chunk })}\n\n`); });
+        unsub = web.subscribe(id, (chunk, done) => {
+          s.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+          if (done) { s.write(`event: done\ndata: {}\n\n`); unsub(); resolve(); }
+        });
         c.req.raw.signal.addEventListener('abort', () => { unsub(); resolve(); });
       });
     });

@@ -7,10 +7,12 @@ import { configRoutes } from './routes/config.js';
 import { channelRoutes } from './routes/channels.js';
 import { eventsRoutes } from './routes/events.js';
 import { chatRoutes } from './routes/chat.js';
+import { tenantsRoutes } from './routes/tenants.js';
 import type { EventEmitter } from 'node:events';
 import type { WebChatAdapter } from '../channels/web.js';
 import type { AgentConfig } from '../config/schema.js';
 import type { SkillRecord } from '../skills/loader.js';
+import type { TenantRegistry } from '../tenants/registry.js';
 
 export interface ApiDeps {
   agentDir: string;
@@ -24,6 +26,7 @@ export interface ApiDeps {
   getConfig: () => AgentConfig;
   patchConfig: (p: Partial<AgentConfig>) => Promise<void>;
   patchTelegram: (p: any) => Promise<void>;
+  tenantRegistry: TenantRegistry;
 }
 
 export function startApi(port: number, d: ApiDeps) {
@@ -35,5 +38,6 @@ export function startApi(port: number, d: ApiDeps) {
   app.route('/', channelRoutes({ patchTelegram: d.patchTelegram }));
   app.route('/', eventsRoutes(d.bus));
   app.route('/', chatRoutes(d.web, d.publicDir));
+  app.route('/', tenantsRoutes(d.tenantRegistry));
   return serve({ fetch: app.fetch, port });
 }

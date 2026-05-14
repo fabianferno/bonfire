@@ -4,6 +4,9 @@ import { ethers } from 'ethers';
 import type { AgentConfig } from '../config/schema.js';
 import { log } from '../util/logger.js';
 
+export type EnvResolver = (key: string) => string | undefined;
+const defaultEnv: EnvResolver = (k) => process.env[k];
+
 export interface ChatModelInfo {
   provider: 'openai-compatible' | 'zerog';
   model: string;
@@ -16,15 +19,15 @@ export interface ChatModelHandle {
   info: ChatModelInfo;
 }
 
-export async function createChatModel(cfg: AgentConfig): Promise<ChatModelHandle> {
-  if (cfg.llm.provider === 'zerog') return createZeroGModel(cfg);
-  return createOpenAiCompatibleModel(cfg);
+export async function createChatModel(cfg: AgentConfig, env: EnvResolver = defaultEnv): Promise<ChatModelHandle> {
+  if (cfg.llm.provider === 'zerog') return createZeroGModel(cfg, env);
+  return createOpenAiCompatibleModel(cfg, env);
 }
 
-function createOpenAiCompatibleModel(cfg: AgentConfig): ChatModelHandle {
+function createOpenAiCompatibleModel(cfg: AgentConfig, env: EnvResolver): ChatModelHandle {
   if (!cfg.llm.baseUrl) throw new Error('llm.baseUrl required for openai-compatible provider');
   if (!cfg.llm.model) throw new Error('llm.model required for openai-compatible provider');
-  const apiKey = process.env[cfg.llm.apiKeyEnv];
+  const apiKey = env(cfg.llm.apiKeyEnv);
   if (!apiKey) throw new Error(`Missing env ${cfg.llm.apiKeyEnv}`);
   const provider = createOpenAICompatible({
     name: 'configured-llm',
@@ -37,9 +40,9 @@ function createOpenAiCompatibleModel(cfg: AgentConfig): ChatModelHandle {
   };
 }
 
-async function createZeroGModel(cfg: AgentConfig): Promise<ChatModelHandle> {
-  const rpcUrl = process.env[cfg.llm.rpcUrlEnv];
-  const privateKey = process.env[cfg.llm.privateKeyEnv];
+async function createZeroGModel(cfg: AgentConfig, env: EnvResolver): Promise<ChatModelHandle> {
+  const rpcUrl = env(cfg.llm.rpcUrlEnv);
+  const privateKey = env(cfg.llm.privateKeyEnv);
   if (!rpcUrl) throw new Error(`Missing env ${cfg.llm.rpcUrlEnv}`);
   if (!privateKey) throw new Error(`Missing env ${cfg.llm.privateKeyEnv}`);
 
@@ -62,7 +65,7 @@ async function createZeroGModel(cfg: AgentConfig): Promise<ChatModelHandle> {
   const chat = services.filter((s) => s.serviceType === 'chatbot' || s.serviceType === 'chat');
   if (!chat.length) throw new Error('0G Compute: no chat services available');
 
-  const preferred = process.env[cfg.llm.preferredProviderEnv]?.toLowerCase();
+  const preferred = env(cfg.llm.preferredProviderEnv)?.toLowerCase();
   const ordered = preferred
     ? [
         ...chat.filter((s) => s.provider?.toLowerCase() === preferred),
@@ -127,9 +130,9 @@ async function loadBrokerModule(): Promise<{ createZGComputeNetworkBroker: any }
   return req('@0glabs/0g-serving-broker');
 }
 
-export function createEmbeddingModel(cfg: AgentConfig): EmbeddingModel<string> | null {
+export function createEmbeddingModel(cfg: AgentConfig, env: EnvResolver = defaultEnv): EmbeddingModel<string> | null {
   if (!cfg.embeddings) return null;
-  const apiKey = process.env[cfg.embeddings.apiKeyEnv];
+  const apiKey = env(cfg.embeddings.apiKeyEnv);
   if (!apiKey) {
     log.warn(`Embeddings configured but env ${cfg.embeddings.apiKeyEnv} is empty; disabling vector memory`);
     return null;

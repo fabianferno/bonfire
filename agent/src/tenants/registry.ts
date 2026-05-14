@@ -10,6 +10,16 @@ export class TenantRegistry {
   private filePath: string;
   private saving = false;
   private saveQueue: (() => void)[] = [];
+  private subscribers: Array<(slug: string) => void> = [];
+
+  /** Register a callback that fires whenever a tenant is created, updated, or deleted. */
+  subscribe(fn: (slug: string) => void): void {
+    this.subscribers.push(fn);
+  }
+
+  private notify(slug: string): void {
+    for (const fn of this.subscribers) fn(slug);
+  }
 
   constructor(filePath: string) {
     this.filePath = filePath;
@@ -19,7 +29,14 @@ export class TenantRegistry {
   async load(): Promise<void> {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      const arr = JSON.parse(raw) as unknown[];
+      let arr: unknown[];
+      try {
+        arr = JSON.parse(raw) as unknown[];
+      } catch (parseErr: any) {
+        // Keep previous in-memory copy on JSON parse failure rather than crashing.
+        log.warn({ err: parseErr?.message }, 'tenants: JSON parse failed, keeping previous state');
+        return;
+      }
       this.cache.clear();
       for (const item of arr) {
         const parsed = TenantSchema.safeParse(item);
@@ -38,7 +55,8 @@ export class TenantRegistry {
         }
         await this.persist();
       } else {
-        throw e;
+        // Keep previous in-memory copy on unexpected read errors.
+        log.warn({ err: e?.message }, 'tenants: load error, keeping previous state');
       }
     }
   }
@@ -48,7 +66,11 @@ export class TenantRegistry {
     const watcher = chokidar.watch(this.filePath, { ignoreInitial: true });
     watcher.on('change', async () => {
       log.info('tenants: file changed, reloading');
+      const prevSlugs = new Set(this.cache.keys());
       await this.load();
+      // Notify all slugs that were present or are now present so caches are cleared.
+      const allSlugs = new Set([...prevSlugs, ...this.cache.keys()]);
+      for (const slug of allSlugs) this.notify(slug);
     });
     return () => { watcher.close(); };
   }
@@ -68,6 +90,7 @@ export class TenantRegistry {
     const tenant = TenantSchema.parse(data);
     this.cache.set(tenant.slug, tenant);
     await this.persist();
+    this.notify(tenant.slug);
     return { ok: true, tenant };
   }
 
@@ -83,6 +106,7 @@ export class TenantRegistry {
     });
     this.cache.set(slug, updated);
     await this.persist();
+    this.notify(slug);
     return updated;
   }
 
@@ -90,6 +114,7 @@ export class TenantRegistry {
     if (!this.cache.has(slug)) return false;
     this.cache.delete(slug);
     await this.persist();
+    this.notify(slug);
     return true;
   }
 

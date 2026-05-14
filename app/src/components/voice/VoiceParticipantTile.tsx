@@ -1,0 +1,85 @@
+"use client";
+
+import { Mic, MicOff } from "lucide-react";
+import Avatar from "@/components/shared/Avatar";
+import type { VoiceParticipantInfo } from "./useVoiceCall";
+
+interface Props {
+  participant: VoiceParticipantInfo;
+}
+
+export default function VoiceParticipantTile({ participant }: Props) {
+  const { name, isLocal, isAgent, audioLevel, muted } = participant;
+  const isSpeaking = audioLevel > 0.01;
+
+  return (
+    <div className="flex flex-col items-center gap-3 p-5 rounded-2xl select-none"
+      style={{ background: "var(--bf-secondary)" }}>
+
+      {/* Avatar with speaking pulse ring */}
+      <div className="relative">
+        {/* Outer pulse ring — only visible when speaking */}
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-full transition-all duration-150 pointer-events-none"
+          style={{
+            boxShadow: isSpeaking
+              ? `0 0 0 3px ${isAgent ? "var(--bf-accent)" : "var(--bf-green)"}`
+              : "0 0 0 3px transparent",
+            borderRadius: "50%",
+          }}
+        />
+        {/* Avatar circle */}
+        <div
+          className="rounded-full overflow-hidden"
+          style={{
+            border: isAgent
+              ? "2px solid var(--bf-accent)"
+              : "2px solid transparent",
+          }}
+        >
+          <Avatar
+            name={name}
+            size={64}
+            color={isAgent ? "#7c9cf5" : "#6e86d6"}
+          />
+        </div>
+      </div>
+
+      {/* Name row */}
+      <div className="flex items-center gap-1.5 max-w-full">
+        <span
+          className="text-white text-sm font-semibold truncate"
+          style={{ maxWidth: 120 }}
+        >
+          {name}
+        </span>
+        {isLocal && (
+          <span className="text-xs flex-shrink-0" style={{ color: "var(--bf-gray)" }}>
+            (you)
+          </span>
+        )}
+        {isAgent && (
+          <span
+            className="text-xs px-1 py-px rounded font-bold text-white uppercase flex-shrink-0"
+            style={{ background: "var(--bf-accent)", fontSize: 9 }}
+          >
+            BOT
+          </span>
+        )}
+      </div>
+
+      {/* Mute indicator */}
+      <div>
+        {muted ? (
+          <MicOff size={14} style={{ color: "var(--bf-red)" }} />
+        ) : (
+          <Mic
+            size={14}
+            style={{ color: isSpeaking ? "var(--bf-green)" : "var(--bf-symbol)" }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

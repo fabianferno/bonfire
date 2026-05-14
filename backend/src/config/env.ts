@@ -23,6 +23,19 @@ const EnvSchema = z.object({
   PRIVY_APP_SECRET: z.string().optional(),
   /** Comma-separated origins; merges with sensible localhost defaults when omitted. */
   CORS_ORIGINS: z.string().optional(),
+  // Voice channels — all optional. When DAILY_API_KEY is present, voice rooms are enabled.
+  DAILY_API_KEY: z.string().optional(),
+  DAILY_DOMAIN: z.string().optional(),
+  DEEPGRAM_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_TTS_VOICE: z.string().optional(),
+  OPENAI_TTS_MODEL: z.string().optional(),
+  /** Absolute path or alias for the Python interpreter used to spawn pipecat-bot.py. Defaults to python3. */
+  VOICE_BOT_PYTHON: z.string().default('python3'),
+  /** 0G LLM endpoint for the voice bot (passed through to the Python subprocess). */
+  OG_LLM_BASE_URL: z.string().optional(),
+  OG_LLM_API_KEY: z.string().optional(),
+  OG_LLM_MODEL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

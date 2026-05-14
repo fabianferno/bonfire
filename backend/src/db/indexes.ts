@@ -45,4 +45,12 @@ export async function createIndexes(db: Db): Promise<void> {
     { key: { slug: 1 }, name: 'slug_1', unique: true, sparse: true },
     { key: { expiresAt: 1 }, name: 'expiresAt_1', expireAfterSeconds: 0 },
   ]);
+
+  // voice sessions: channelId lookup, status filter, and TTL cleanup of ended sessions
+  await db.collection(collections.voiceSessions).createIndexes([
+    { key: { channelId: 1 }, name: 'channelId_1' },
+    { key: { status: 1 }, name: 'status_1' },
+    // TTL: drop ended sessions 1 hour after they expire
+    { key: { expiresAt: 1 }, name: 'expiresAt_1_ttl', expireAfterSeconds: 3600 },
+  ]);
 }

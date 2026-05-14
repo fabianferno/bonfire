@@ -74,3 +74,9 @@ backend/.storage-mock/
 contracts/cache/
 contracts/artifacts/
 contracts/typechain-types/
+
+# Voice worker (Pipecat) Python artifacts
+backend/voice-worker/.venv/
+backend/voice-worker/__pycache__/
+backend/voice-worker/*.pyc
+backend/voice-worker/.pytest_cache/

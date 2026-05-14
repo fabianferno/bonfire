@@ -9,6 +9,9 @@ import { createChainIndexer } from './chain/indexer.js';
 import { createOgStorage } from './storage-0g/index.js';
 import type { InftDeps } from './agents/invoker.js';
 import { attachSignalingServer } from './voice/signaling.js';
+import { createDailyClient, VoiceManager, defaultBotSpawner } from './voice/index.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 function useDevMemoryMongo(raw: string | undefined): boolean {
   if (!raw) return false;
@@ -65,12 +68,43 @@ async function main() {
 
   const corsExtra = env.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
 
+  // Wire Daily.co voice manager when DAILY_API_KEY is present.
+  let voiceManager: VoiceManager | undefined;
+  let stopVoiceSweeper: (() => void) | undefined;
+  if (env.DAILY_API_KEY) {
+    const daily = createDailyClient();
+    const __dir = dirname(fileURLToPath(import.meta.url));
+    // Resolve the repo root: src/index.ts → ../../.. → repo root
+    const repoRoot = resolve(__dir, '..', '..');
+    const spawnBot = defaultBotSpawner({
+      workerCmd: env.VOICE_BOT_PYTHON,
+      workerScript: resolve(repoRoot, 'backend', 'voice-worker', 'pipecat-bot.py'),
+      cwd: repoRoot,
+    });
+    voiceManager = new VoiceManager({
+      db,
+      daily,
+      storage: inftDeps?.storage,
+      platformExecutorPrivkey: inftDeps?.platformExecutorPrivkey,
+      spawnBot,
+    });
+    const sweepInterval = setInterval(() => {
+      voiceManager!.sweep().catch((e) => log.warn({ err: e }, 'voice sweeper error'));
+    }, 30_000);
+    sweepInterval.unref();
+    stopVoiceSweeper = () => clearInterval(sweepInterval);
+    log.info('voice channels enabled (Daily.co)');
+  } else {
+    log.warn('voice channels disabled — set DAILY_API_KEY to enable');
+  }
+
   const app = buildApp({
     db,
     jwtSecret: env.JWT_SECRET,
     jwtExpiresIn: env.JWT_EXPIRES_IN,
     inftDeps,
     corsOrigins: corsExtra?.length ? corsExtra : undefined,
+    voiceManager,
   });
   const server = serve({ fetch: app.fetch, port: env.PORT });
   // Attach WebRTC signaling server on the same port at ws://host/voice
@@ -79,6 +113,8 @@ async function main() {
 
   const shutdown = async () => {
     log.info('shutting down');
+    stopVoiceSweeper?.();
+    if (voiceManager) await voiceManager.shutdown();
     server.close();
     if (stopIndexer) await stopIndexer();
     await closeDb();

@@ -131,6 +131,8 @@ interface AppContextValue {
   servers: Server[];
   activeServerId: string;
   activeChannelId: string;
+  activeVoiceChannelId: string | null;
+  setActiveVoiceChannelId: (id: string | null) => void;
   setActiveServer: (id: string) => void;
   setActiveChannel: (id: string) => void;
   createServer: (name: string, color: string, description?: string) => Promise<{
@@ -399,6 +401,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [servers, setServers] = useState<Server[]>([]);
   const [activeServerId, setActiveServerId] = useState("");
   const [activeChannelId, setActiveChannelId] = useState("");
+  const [activeVoiceChannelId, setActiveVoiceChannelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -636,6 +639,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveChannelId(id);
   }, []);
 
+  const setVoiceChannelId = useCallback((id: string | null) => {
+    setActiveVoiceChannelId(id);
+  }, []);
+
   const createServer = useCallback(
     async (name: string, _color: string, _description?: string): Promise<{
       server: Server;
@@ -830,6 +837,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         servers,
         activeServerId,
         activeChannelId,
+        activeVoiceChannelId,
+        setActiveVoiceChannelId: setVoiceChannelId,
         setActiveServer,
         setActiveChannel,
         createServer,

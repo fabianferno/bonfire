@@ -92,11 +92,27 @@ export interface ChannelDoc {
   serverId: ObjectId;
   name: string;
   topic: string | null;
-  type: 'text';
+  type: 'text' | 'voice';
   defaultAgentId: ObjectId | null;
   position: number;
   cascadeEnabled?: boolean;
   createdAt: Date;
+}
+
+export interface VoiceSessionDoc {
+  _id: ObjectId;
+  channelId: ObjectId;
+  serverId: ObjectId;
+  dailyRoomName: string;       // unique room name
+  dailyRoomUrl: string;        // https://<domain>.daily.co/<roomName>
+  agentSlug: string | null;    // resolved persona (defaultAgentId or fallback)
+  agentSoul: string;           // decrypted SOUL injected to Python bot
+  participantIds: ObjectId[];  // active user IDs (Mongo refs)
+  pythonPid: number | null;    // subprocess PID (null if bot died)
+  status: 'starting' | 'active' | 'ended';
+  startedAt: Date;
+  expiresAt: Date;             // startedAt + 10 minutes
+  endedAt: Date | null;
 }
 
 export interface MessageMention { type: PrincipalType; id: ObjectId; }
@@ -125,4 +141,5 @@ export const collections = {
   channels: 'channels',
   messages: 'messages',
   mintReservations: 'mintReservations',
+  voiceSessions: 'voiceSessions',
 } as const;

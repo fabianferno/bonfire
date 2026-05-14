@@ -9,7 +9,9 @@ import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { internalRoutes } from './routes/internal.js';
 import { cascadeRoutes } from './routes/cascade.js';
+import { voiceRoutes } from './routes/voice.js';
 import type { InftDeps } from '../agents/invoker.js';
+import type { VoiceManager } from '../voice/manager.js';
 
 function defaultCorsOrigins(): string[] {
   const out: string[] = [];
@@ -40,6 +42,8 @@ export interface AppDeps {
   corsOrigins?: string[];
   /** Present when chain integration is configured (INFT_CONTRACT_ADDRESS + PLATFORM_EXECUTOR_PRIVATE_KEY). */
   inftDeps?: InftDeps;
+  /** Present when DAILY_API_KEY is set and voice channels are enabled. */
+  voiceManager?: VoiceManager;
 }
 
 export function buildApp(deps: AppDeps) {
@@ -75,5 +79,8 @@ export function buildApp(deps: AppDeps) {
   app.route('/', messageRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, cascadeConfig: deps.cascadeConfig, inftDeps: deps.inftDeps }));
   app.route('/', internalRoutes({ db: deps.db }));
   app.route('/', cascadeRoutes(deps));
+  if (deps.voiceManager) {
+    app.route('/', voiceRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, voiceManager: deps.voiceManager }));
+  }
   return app;
 }

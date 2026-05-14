@@ -8,6 +8,7 @@ import { log } from '../util/logger.js';
 import type { InboundMessage } from '../channels/base.js';
 import type { EmbeddingModel } from 'ai';
 import { embedText } from '../memory/embeddings.js';
+import type { TenantRegistry } from '../tenants/registry.js';
 
 export interface RuntimeDeps {
   loaded: LoadedAgent;
@@ -16,6 +17,7 @@ export interface RuntimeDeps {
   store: MemoryStore;
   getSkills: () => SkillRecord[];
   getTools: () => Record<string, Tool>;
+  tenantRegistry?: TenantRegistry;
 }
 
 export class AgentRuntime {
@@ -25,7 +27,18 @@ export class AgentRuntime {
   }
 
   async handle(msg: InboundMessage): Promise<void> {
-    const { sessionId, history } = this.sessions.load({ channel: msg.channel, chatId: msg.chatId });
+    // Resolve tenant-specific overrides when a tenant slug is provided
+    const tenant = msg.tenant && this.d.tenantRegistry
+      ? this.d.tenantRegistry.get(msg.tenant) ?? null
+      : null;
+
+    const soul = tenant?.soul ?? this.d.loaded.soul;
+    const agentRules = tenant?.agents ?? this.d.loaded.agents;
+    const agentName = tenant?.name ?? this.d.loaded.config.name;
+    const tenantPrefix = tenant ? `tenant:${tenant.slug}::` : '';
+    const effectiveChatId = `${tenantPrefix}${msg.chatId}`;
+
+    const { sessionId, history } = this.sessions.load({ channel: msg.channel, chatId: effectiveChatId });
     let memorySnippets: string[] = [];
     if (this.d.embedModel) {
       try {
@@ -34,9 +47,9 @@ export class AgentRuntime {
       } catch (e) { log.warn({ err: e }, 'embed/search failed'); }
     }
     const system = buildSystemPrompt({
-      agentName: this.d.loaded.config.name,
-      soul: this.d.loaded.soul,
-      agents: this.d.loaded.agents,
+      agentName,
+      soul,
+      agents: agentRules,
       skills: this.d.getSkills(),
       memorySnippets,
     });

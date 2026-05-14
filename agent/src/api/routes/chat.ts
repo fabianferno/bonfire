@@ -14,9 +14,9 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
   });
 
   app.post('/chat/message', async (c) => {
-    const { userId = 'anonymous', text } = await c.req.json();
+    const { userId = 'anonymous', text, tenant } = await c.req.json();
     if (!text) return c.json({ error: 'text required' }, 400);
-    const streamId = await web.enqueue(userId, text);
+    const streamId = await web.enqueue(userId, text, tenant ?? undefined);
     return c.json({ streamId });
   });
 

@@ -1,9 +1,21 @@
+import { randomBytes, createHash } from 'node:crypto';
 import type { Db, ObjectId } from 'mongodb';
 import { ObjectId as OID } from 'mongodb';
 import type { AgentDoc } from '../db/types.js';
 import { collections } from '../db/types.js';
 
 export class AgentSlugTakenError extends Error { code = 'agent_slug_taken' as const; }
+
+function newAgentKey(): { key: string; hash: string } {
+  const raw = randomBytes(16).toString('hex');
+  const key = `bka_${raw}`;
+  const hash = createHash('sha256').update(key).digest('hex');
+  return { key, hash };
+}
+
+export function hashAgentKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
 
 export interface CreateAgentInput {
   name: string;
@@ -17,8 +29,9 @@ export interface CreateAgentInput {
   createdBy: ObjectId;
 }
 
-export async function createAgent(db: Db, input: CreateAgentInput): Promise<AgentDoc> {
+export async function createAgent(db: Db, input: CreateAgentInput): Promise<{ agent: AgentDoc; agentKey: string }> {
   const now = new Date();
+  const { key, hash } = newAgentKey();
   const doc: AgentDoc = {
     _id: new OID(),
     name: input.name,
@@ -29,13 +42,14 @@ export async function createAgent(db: Db, input: CreateAgentInput): Promise<Agen
     tags: input.tags ?? [],
     baseUrl: input.baseUrl,
     visibility: input.visibility,
+    agentKeyHash: hash,
     createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,
   };
   try { await db.collection<AgentDoc>(collections.agents).insertOne(doc); }
   catch (e: any) { if (e?.code === 11000) throw new AgentSlugTakenError(); throw e; }
-  return doc;
+  return { agent: doc, agentKey: key };
 }
 
 export async function findAgentByIdOrSlug(db: Db, idOrSlug: string): Promise<AgentDoc | null> {
@@ -61,6 +75,20 @@ export async function listPublicAgents(db: Db, opts: { q?: string; tag?: string;
 export async function deleteAgent(db: Db, agentId: ObjectId): Promise<boolean> {
   const res = await db.collection(collections.agents).deleteOne({ _id: agentId });
   return res.deletedCount === 1;
+}
+
+export async function rotateAgentKey(db: Db, agentId: ObjectId): Promise<string | null> {
+  const { key, hash } = newAgentKey();
+  const res = await db.collection<AgentDoc>(collections.agents).findOneAndUpdate(
+    { _id: agentId },
+    { $set: { agentKeyHash: hash, updatedAt: new Date() } },
+    { returnDocument: 'after' }
+  );
+  return res ? key : null;
+}
+
+export async function findAgentByKeyHash(db: Db, hash: string): Promise<AgentDoc | null> {
+  return await db.collection<AgentDoc>(collections.agents).findOne({ agentKeyHash: hash });
 }
 
 export function publicAgent(a: AgentDoc) {

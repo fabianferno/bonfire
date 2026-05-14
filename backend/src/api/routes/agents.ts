@@ -5,7 +5,7 @@ import type { Db } from 'mongodb';
 import { requireUser, type AuthBindings } from '../../auth/middleware.js';
 import {
   AgentSlugTakenError, createAgent, findAgentByIdOrSlug,
-  listPublicAgents, deleteAgent, publicAgent,
+  listPublicAgents, deleteAgent, publicAgent, rotateAgentKey,
 } from '../../agents/registry.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
@@ -46,8 +46,8 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const parsed = CreateAgentBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
     try {
-      const a = await createAgent(deps.db, { ...parsed.data, createdBy: c.get('user')._id });
-      return c.json({ agent: publicAgent(a) }, 201);
+      const { agent, agentKey } = await createAgent(deps.db, { ...parsed.data, createdBy: c.get('user')._id });
+      return c.json({ agent: publicAgent(agent), agentKey }, 201);
     } catch (e) {
       if (e instanceof AgentSlugTakenError) return c.json({ error: 'agent_slug_taken' }, 409);
       throw e;
@@ -60,6 +60,14 @@ export function agentRoutes(deps: AgentRouteDeps) {
     if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
     await deleteAgent(deps.db, a._id);
     return c.json({ ok: true });
+  });
+
+  app.post('/v1/agents/:aid/rotate-key', requireAuth, async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    const key = await rotateAgentKey(deps.db, a._id);
+    return c.json({ agentKey: key });
   });
 
   return app;

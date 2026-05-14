@@ -64,4 +64,39 @@ describe('agent routes', () => {
     const r = await jsonReq(app, 'GET', '/v1/agents?tag=research');
     expect(r.body.agents.map((a: any) => a.slug)).toEqual(['r']);
   });
+
+  it('returns agentKey once on creation; never on subsequent reads', async () => {
+    const me = await registerAndLogin(app);
+    const create = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'A', slug: 'a', description: 'x', baseUrl: 'http://x:7777', tags: [], visibility: 'public',
+    }, me.token);
+    expect(create.body.agentKey).toMatch(/^bka_[a-f0-9]{32,}$/);
+
+    const read = await jsonReq(app, 'GET', '/v1/agents/a');
+    expect(read.body.agent).not.toHaveProperty('agentKey');
+    expect(read.body.agent).not.toHaveProperty('agentKeyHash');
+  });
+
+  it('owner can rotate agentKey', async () => {
+    const me = await registerAndLogin(app);
+    const create = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'A', slug: 'a-rot', description: 'x', baseUrl: 'http://x:7777', tags: [], visibility: 'public',
+    }, me.token);
+    const firstKey = create.body.agentKey;
+
+    const rot = await jsonReq(app, 'POST', `/v1/agents/${create.body.agent.id}/rotate-key`, {}, me.token);
+    expect(rot.status).toBe(200);
+    expect(rot.body.agentKey).toMatch(/^bka_[a-f0-9]{32,}$/);
+    expect(rot.body.agentKey).not.toBe(firstKey);
+  });
+
+  it('non-owner cannot rotate key', async () => {
+    const alice = await registerAndLogin(app, { username: 'alice-rk' });
+    const bob = await registerAndLogin(app, { username: 'bob-rk' });
+    const create = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'A', slug: 'a-foreign', description: 'x', baseUrl: 'http://x:7777', tags: [], visibility: 'public',
+    }, alice.token);
+    const rot = await jsonReq(app, 'POST', `/v1/agents/${create.body.agent.id}/rotate-key`, {}, bob.token);
+    expect(rot.status).toBe(403);
+  });
 });

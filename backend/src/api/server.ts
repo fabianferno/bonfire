@@ -7,6 +7,7 @@ import { agentRoutes } from './routes/agents.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { internalRoutes } from './routes/internal.js';
+import { cascadeRoutes } from './routes/cascade.js';
 
 export interface AppDeps {
   db: Db;
@@ -25,5 +26,6 @@ export function buildApp(deps: AppDeps) {
   app.route('/', channelRoutes(deps));
   app.route('/', messageRoutes(deps));
   app.route('/', internalRoutes({ db: deps.db }));
+  app.route('/', cascadeRoutes(deps));
   return app;
 }

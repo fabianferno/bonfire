@@ -23,6 +23,7 @@ const PatchChannelBody = z.object({
   topic: z.string().max(256).nullable().optional(),
   defaultAgentId: z.string().regex(/^[a-f0-9]{24}$/).nullable().optional(),
   position: z.number().int().nonnegative().optional(),
+  cascadeEnabled: z.boolean().optional(),
 });
 
 export interface ChannelRouteDeps { db: Db; jwtSecret: string; }
@@ -86,6 +87,7 @@ export function channelRoutes(deps: ChannelRouteDeps) {
         $set.defaultAgentId = aid;
       }
     }
+    if (parsed.data.cascadeEnabled !== undefined) $set.cascadeEnabled = parsed.data.cascadeEnabled;
     const updated = await deps.db.collection(collections.channels).findOneAndUpdate(
       { _id: c.get('channel')._id }, { $set }, { returnDocument: 'after' }
     );

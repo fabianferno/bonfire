@@ -46,6 +46,7 @@ export function publicChannel(ch: ChannelDoc) {
     type: ch.type,
     defaultAgentId: ch.defaultAgentId?.toHexString() ?? null,
     position: ch.position,
+    cascadeEnabled: ch.cascadeEnabled !== false,
     createdAt: ch.createdAt.toISOString(),
   };
 }

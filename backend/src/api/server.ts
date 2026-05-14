@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { Db } from 'mongodb';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -14,10 +15,23 @@ export interface AppDeps {
   jwtSecret: string;
   jwtExpiresIn: string;
   cascadeConfig?: { maxHops?: number; maxInvocationsPerRoot?: number };
+  /** Allowed CORS origins. Defaults to localhost dev origins. */
+  corsOrigins?: string[];
 }
 
 export function buildApp(deps: AppDeps) {
   const app = new Hono();
+  const allowed = deps.corsOrigins ?? ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  app.use(
+    '*',
+    cors({
+      origin: (origin) => (origin && allowed.includes(origin) ? origin : allowed[0]),
+      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['content-type', 'authorization', 'x-bonfire-agent-key'],
+      credentials: false,
+      maxAge: 600,
+    })
+  );
   app.get('/health', (c) => c.json({ ok: true }));
   app.route('/', authRoutes(deps));
   app.route('/', userRoutes(deps));

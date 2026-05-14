@@ -277,11 +277,10 @@ export function agentRoutes(deps: AgentRouteDeps) {
 
     // 8. Upload to 0G Storage in parallel
     const storage = createOgStorage();
-    const [manifestUri, bundleUri, sealedDEKUri] = await Promise.all([
-      storage.upload(`publicManifest/${reservedId}.json`, Buffer.from(JSON.stringify(publicManifest), 'utf8')),
-      storage.upload(`encryptedBundle/${reservedId}.bin`, encryptedBundle),
-      storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK),
-    ]);
+    // Sequential uploads — parallel collides on the uploader wallet's tx nonce on 0G.
+    const manifestUri = await storage.upload(`publicManifest/${reservedId}.json`, Buffer.from(JSON.stringify(publicManifest), 'utf8'));
+    const bundleUri = await storage.upload(`encryptedBundle/${reservedId}.bin`, encryptedBundle);
+    const sealedDEKUri = await storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK);
 
     // Derive the base URI for the sealed DEK directory (strip the filename)
     // Store the sealed-DEK URI as-is; decrypt fetches it directly (no append).

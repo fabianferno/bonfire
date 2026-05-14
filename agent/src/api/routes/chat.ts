@@ -25,7 +25,10 @@ export function chatRoutes(web: WebChatAdapter, publicDir: string) {
     return stream(c, async (s) => {
       let unsub = () => {};
       await new Promise<void>((resolve) => {
-        unsub = web.subscribe(id, (chunk) => { s.write(`data: ${JSON.stringify({ chunk })}\n\n`); });
+        unsub = web.subscribe(id, (chunk, done) => {
+          s.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+          if (done) { s.write(`event: done\ndata: {}\n\n`); unsub(); resolve(); }
+        });
         c.req.raw.signal.addEventListener('abort', () => { unsub(); resolve(); });
       });
     });

@@ -68,3 +68,20 @@ export interface BackendMember {
   alias: string | null;
   joinedAt: string;
 }
+
+export interface BackendServerWallet {
+  address: string;
+  /** Present in POST /v1/servers response and GET /v1/servers/:sid/wallet for owners */
+  privateKey?: string;
+  network: string;
+  createdAt: string;
+}
+
+export interface BackendServerFunding {
+  faucetUrl: string;
+  rpcUrl: string;
+  chainId?: number;
+  tokenSymbol: string;
+  minRecommendedBalance?: string;
+  note?: string;
+}

@@ -4,8 +4,16 @@ import { useRouter } from "next/navigation";
 import { Plus, Compass } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
+import WalletFundingModal from "@/components/server/WalletFundingModal";
+import type { BackendServerWallet, BackendServerFunding } from "@/lib/types";
 
 const SERVER_COLORS = ["#f97316","#6e86d6","#43b581","#f04747","#faa61a","#6633cc","#00d8ff","#ed1b24"];
+
+interface FundingState {
+  wallet: BackendServerWallet;
+  funding: BackendServerFunding;
+  serverName: string;
+}
 
 export default function LeftNav() {
   const { servers, activeServerId, setActiveServer, createServer } = useApp();
@@ -14,12 +22,21 @@ export default function LeftNav() {
   const [name, setName] = useState("");
   const [color, setColor] = useState(SERVER_COLORS[0]);
   const [desc, setDesc] = useState("");
+  const [fundingState, setFundingState] = useState<FundingState | null>(null);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!name.trim()) return;
-    createServer(name.trim(), color, desc.trim());
+    const serverName = name.trim();
     setName(""); setDesc(""); setColor(SERVER_COLORS[0]);
     setShowModal(false);
+    try {
+      const result = await createServer(serverName, color, desc.trim());
+      if (result.wallet && result.funding) {
+        setFundingState({ wallet: result.wallet, funding: result.funding, serverName });
+      }
+    } catch {
+      // createServer already surfaces the error via AppContext's error state
+    }
   };
 
   return (
@@ -57,6 +74,15 @@ export default function LeftNav() {
         </NavPill>
       </nav>
 
+      {fundingState && (
+        <WalletFundingModal
+          wallet={fundingState.wallet}
+          funding={fundingState.funding}
+          serverName={fundingState.serverName}
+          onClose={() => setFundingState(null)}
+        />
+      )}
+
       {showModal && (
         <Modal
           title="Create a Server"
@@ -73,7 +99,7 @@ export default function LeftNav() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="My Research Lab"
-              onKeyDown={e => { if (e.key === "Enter") handleCreate(); }}
+              onKeyDown={e => { if (e.key === "Enter") void handleCreate(); }}
             />
           </div>
           <div>

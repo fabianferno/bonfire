@@ -15,6 +15,8 @@ import type {
   BackendMessage,
   BackendAgent,
   BackendMember,
+  BackendServerWallet,
+  BackendServerFunding,
 } from "@/lib/types";
 
 // ─── Public types (kept stable so existing components compile) ─────────────
@@ -118,7 +120,11 @@ interface AppContextValue {
   activeChannelId: string;
   setActiveServer: (id: string) => void;
   setActiveChannel: (id: string) => void;
-  createServer: (name: string, color: string, description?: string) => void;
+  createServer: (name: string, color: string, description?: string) => Promise<{
+    server: Server;
+    wallet?: BackendServerWallet;
+    funding?: BackendServerFunding;
+  }>;
   createChannel: (
     serverId: string,
     name: string,
@@ -483,16 +489,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createServer = useCallback(
-    async (name: string, _color: string, _description?: string) => {
+    async (name: string, _color: string, _description?: string): Promise<{
+      server: Server;
+      wallet?: BackendServerWallet;
+      funding?: BackendServerFunding;
+    }> => {
       const slug = name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "")
         .slice(0, 32) || `server-${Date.now()}`;
       try {
-        const { server: raw } = await bf.createServer({ name, slug });
+        const result = await bf.createServer({ name, slug });
         const newServer: Server = {
-          ...mapServer(raw),
+          ...mapServer(result.server),
           color: _color,
           description: _description,
           channels: [],
@@ -500,10 +510,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           members: [],
         };
         setServers((prev) => [...prev, newServer]);
-        setActiveServerId(raw.id);
+        setActiveServerId(result.server.id);
         setActiveChannelId("");
+        return { server: newServer, wallet: result.wallet, funding: result.funding };
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create server");
+        throw err;
       }
     },
     [],

@@ -9,6 +9,7 @@ import {
 import { useApp, type ChannelType, type AuditEntry } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
+import WalletPanel from "@/components/server/WalletPanel";
 
 export default function ServerSidebar() {
   const { activeServer, activeChannelId, setActiveChannel, createChannel, user, leaveServer, activeServerId } = useApp();
@@ -111,10 +112,9 @@ export default function ServerSidebar() {
           )}
         </div>
 
-        {/* Balance strip */}
-        <div className="mx-3 mt-2 mb-1 rounded px-3 py-2 flex items-center justify-between text-xs" style={{ background: "var(--bf-quaternary)" }}>
-          <span style={{ color: "var(--bf-gray)" }}>Server Balance</span>
-          <span className="font-semibold" style={{ color: "var(--bf-fire)" }}>{activeServer.balance} 0G</span>
+        {/* Server wallet panel — shows live 0G balance and faucet link */}
+        <div className="mt-2">
+          <WalletPanel serverId={activeServer.id} />
         </div>
 
         {/* Channel list */}

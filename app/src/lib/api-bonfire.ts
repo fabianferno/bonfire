@@ -6,6 +6,8 @@ import type {
   BackendMessage,
   BackendAgent,
   BackendMember,
+  BackendServerWallet,
+  BackendServerFunding,
 } from './types';
 
 export const bf = {
@@ -16,8 +18,13 @@ export const bf = {
   getServer: (sid: string) =>
     api<{ server: BackendServer }>('GET', `/v1/servers/${sid}`),
 
-  createServer: (body: { name: string; slug: string }) =>
-    api<{ server: BackendServer }>('POST', '/v1/servers', body),
+  createServer: (body: { name: string; slug: string; iconUrl?: string | null }) =>
+    api<{ server: BackendServer; wallet: BackendServerWallet; funding: BackendServerFunding }>('POST', '/v1/servers', body),
+
+  getServerWallet: (sid: string) =>
+    api<{ wallet: BackendServerWallet; balance: string | null; balanceError: string | null; funding: BackendServerFunding }>(
+      'GET', `/v1/servers/${sid}/wallet`
+    ),
 
   getChannels: (sid: string) =>
     api<{ channels: BackendChannel[] }>('GET', `/v1/servers/${sid}/channels`),

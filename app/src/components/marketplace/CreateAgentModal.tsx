@@ -185,7 +185,8 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           temperature: Number.isFinite(llmTemp) ? llmTemp : 0.7,
           maxTokens: Number.isFinite(llmMax) ? llmMax : 1024,
         },
-        mode: fields.mode,
+        // Backend expects the string label; converts to the on-chain uint8 internally.
+        mode: fields.mode === 0 ? 'public' : 'permissioned',
       };
 
       // POST /v1/agents/mint — backend encrypts, uploads to 0G Storage, returns

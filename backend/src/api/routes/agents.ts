@@ -284,7 +284,8 @@ export function agentRoutes(deps: AgentRouteDeps) {
     ]);
 
     // Derive the base URI for the sealed DEK directory (strip the filename)
-    const sealedDEKBaseUri = sealedDEKUri.replace(/\/shared\.bin$/, '');
+    // Store the sealed-DEK URI as-is; decrypt fetches it directly (no append).
+    const sealedDEKBaseUri = sealedDEKUri;
 
     // 9. Compute bundleHash = keccak256 of the packed encrypted bundle
     const bundleHashHex = keccak256(encryptedBundle);
@@ -356,6 +357,15 @@ export function agentRoutes(deps: AgentRouteDeps) {
       .findOne({ reservedId: reservationId });
 
     if (!reservation) return c.json({ error: 'reservation_not_found' }, 410);
+    // If already minted, return the existing AgentDoc so repeat calls are idempotent
+    // (e.g. React StrictMode double-fire, browser retry after network hiccup).
+    if (reservation.status === 'minted') {
+      const existing = await deps.db
+        .collection<AgentDoc>(collections.agents)
+        .findOne({ slug: reservation.slug });
+      if (existing) return c.json({ agent: publicAgent(existing) });
+      return c.json({ error: 'reservation_already_used' }, 410);
+    }
     if (reservation.status !== 'uploaded') return c.json({ error: 'reservation_already_used' }, 410);
     if (reservation.expiresAt < new Date()) return c.json({ error: 'reservation_expired' }, 410);
 

@@ -110,7 +110,7 @@ export function publicAgent(a: AgentDoc) {
     tags: a.tags,
     baseUrl: a.baseUrl,
     visibility: a.visibility,
-    createdBy: a.createdBy.toHexString(),
+    createdBy: a.createdBy ? a.createdBy.toHexString() : null,
     createdAt: a.createdAt.toISOString(),
   };
 }

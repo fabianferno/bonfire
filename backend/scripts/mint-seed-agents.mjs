@@ -109,7 +109,9 @@ async function main() {
 
   const mongo = new MongoClient(mongoUrl);
   await mongo.connect();
-  const db = mongo.db();
+  // Use MONGODB_DB if the URI doesn't carry a default db name (backend convention).
+  const dbName = process.env.MONGODB_DB ?? undefined;
+  const db = dbName ? mongo.db(dbName) : mongo.db();
   const agentsCol = db.collection(collections.agents);
 
   // ── Per-tenant loop ───────────────────────────────────────────────────────
@@ -177,9 +179,8 @@ async function main() {
         storage.upload(`sealedDEK/${reservedId}/shared.bin`, sealedDEK),
       ]);
 
-      // sealedDEKBaseUri is the directory-level URI (strip "/shared.bin" suffix).
-      // The contract stores the base; the backend appends "/shared.bin" on fetch.
-      const sealedDEKBaseUri = sealedDEKUri.replace(/\/shared\.bin$/, '');
+      // sealedDEKBaseUri stores the sealed-DEK URI directly; decrypt fetches it as-is.
+      const sealedDEKBaseUri = sealedDEKUri;
 
       // ── 4. Mint on-chain ──────────────────────────────────────────────────
       console.log(`  ${label} sending mint tx…`);

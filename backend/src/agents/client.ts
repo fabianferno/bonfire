@@ -2,15 +2,19 @@ export interface InvokeAgentInput {
   baseUrl: string;
   chatId: string;
   text: string;
+  /** Tenant slug — routes to a named personality on the agent. */
+  tenant?: string;
   /** Abort signal for upstream call. */
   signal?: AbortSignal;
 }
 
 export async function invokeAgent(input: InvokeAgentInput): Promise<string> {
+  const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
+  if (input.tenant) body.tenant = input.tenant;
   const msgRes = await fetch(`${input.baseUrl}/chat/message`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ userId: input.chatId, text: input.text }),
+    body: JSON.stringify(body),
     signal: input.signal,
   });
   if (!msgRes.ok) throw new Error(`agent /chat/message returned ${msgRes.status}`);
@@ -56,11 +60,13 @@ async function accumulateSse(body: ReadableStream<Uint8Array>): Promise<string> 
 export interface OpenStreamHandle { streamId: string; upstreamUrl: string; }
 
 /** Phase 1: POST /chat/message and return the agent-issued streamId without consuming the stream yet. */
-export async function openAgentStream(input: { baseUrl: string; chatId: string; text: string }): Promise<OpenStreamHandle> {
+export async function openAgentStream(input: { baseUrl: string; chatId: string; text: string; tenant?: string }): Promise<OpenStreamHandle> {
+  const body: Record<string, unknown> = { userId: input.chatId, text: input.text };
+  if (input.tenant) body.tenant = input.tenant;
   const res = await fetch(`${input.baseUrl}/chat/message`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ userId: input.chatId, text: input.text }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`agent /chat/message returned ${res.status}`);
   const { streamId } = (await res.json()) as { streamId: string };

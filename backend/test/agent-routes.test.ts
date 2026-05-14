@@ -99,4 +99,28 @@ describe('agent routes', () => {
     const rot = await jsonReq(app, 'POST', `/v1/agents/${create.body.agent.id}/rotate-key`, {}, bob.token);
     expect(rot.status).toBe(403);
   });
+
+  it('POST /v1/agents without soul/agents still creates the marketplace record normally', async () => {
+    const me = await registerAndLogin(app);
+    const res = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'Basic', slug: 'basic-no-soul', description: 'no soul provided',
+      baseUrl: 'http://x:7777', tags: [], visibility: 'public',
+    }, me.token);
+    expect(res.status).toBe(201);
+    expect(res.body.agent.slug).toBe('basic-no-soul');
+    expect(res.body.agentKey).toMatch(/^bka_/);
+  });
+
+  it('PATCH /v1/agents/:aid forbidden for non-owner regardless of body', async () => {
+    const alice = await registerAndLogin(app, { username: 'alice-p' });
+    const bob = await registerAndLogin(app, { username: 'bob-p' });
+    const create = await jsonReq(app, 'POST', '/v1/agents', {
+      name: 'Alice Bot', slug: 'alice-bot', description: 'x',
+      baseUrl: 'http://x:7777', tags: [], visibility: 'public',
+    }, alice.token);
+    expect(create.status).toBe(201);
+    const patch = await jsonReq(app, 'PATCH', `/v1/agents/${create.body.agent.id}`,
+      { description: 'hijack' }, bob.token);
+    expect(patch.status).toBe(403);
+  });
 });

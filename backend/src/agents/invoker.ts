@@ -51,7 +51,7 @@ export async function startStreamingInvocation(ctx: InvocationContext, agents: A
   for (const agent of agents) {
     try {
       const { streamId, upstreamUrl } = await openAgentStream({
-        baseUrl: agent.baseUrl, chatId, text: ctx.userMessage.content,
+        baseUrl: agent.baseUrl, chatId, text: ctx.userMessage.content, tenant: agent.slug,
       });
       registerStream({
         streamId,
@@ -88,6 +88,7 @@ export async function runInvocation(ctx: InvocationContext, agents: AgentDoc[]):
         baseUrl: agent.baseUrl,
         chatId,
         text: ctx.userMessage.content,
+        tenant: agent.slug,
       });
       const persisted = await insertMessage(ctx.db, {
         channelId: ctx.channel._id,
@@ -259,6 +260,7 @@ async function runInvocationLinked(args: {
         baseUrl: agent.baseUrl,
         chatId,
         text,
+        tenant: agent.slug,
       });
       const persisted = await insertMessage(args.db, {
         channelId: args.channel._id,

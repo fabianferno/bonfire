@@ -55,9 +55,17 @@ async function createZeroGModel(cfg: AgentConfig, env: EnvResolver): Promise<Cha
 
   try { await broker.ledger.getLedger(); }
   catch {
-    log.info('0G broker: creating ledger with 0.05 OG');
-    try { await broker.ledger.addLedger(0.05); }
-    catch (e: any) { log.warn({ err: e?.message }, '0G broker: addLedger failed'); }
+    // No ledger yet — deposit most of the wallet's native balance, keeping a small reserve for gas.
+    // 0G SDK requires a minimum of 3 OG to create a ledger.
+    const balanceWei = await rpcProvider.getBalance(wallet.address);
+    const balanceOg = Number(ethers.formatEther(balanceWei));
+    const reserve = 0.2;
+    const amount = Math.max(balanceOg - reserve, 0);
+    if (amount < 3) {
+      throw new Error(`0G ledger requires min 3 OG; wallet ${wallet.address} has ${balanceOg.toFixed(4)} OG. Fund at least 3.5 OG.`);
+    }
+    log.info({ wallet: wallet.address, amount }, '0G broker: creating ledger');
+    await broker.ledger.addLedger(amount);
   }
 
   const services: any[] = await broker.inference.listService();
@@ -84,9 +92,11 @@ async function createZeroGModel(cfg: AgentConfig, env: EnvResolver): Promise<Cha
     try {
       try { await broker.inference.getAccount(svc.provider); }
       catch {
-        try { await broker.ledger.transferFund(svc.provider, 'inference', 0.05); }
-        catch (e: any) {
-          log.debug({ provider: svc.provider, err: e?.message?.slice?.(0, 120) }, '0G broker: transferFund failed, skipping');
+        try {
+          // SDK requires a BigInt amount in wei (not OG). Send 1 OG to seed the provider sub-account.
+          await broker.ledger.transferFund(svc.provider, 'inference', ethers.parseEther('1'));
+        } catch (e: any) {
+          log.warn({ provider: svc.provider, err: e?.message?.slice?.(0, 200) }, '0G broker: transferFund failed, skipping');
           continue;
         }
       }

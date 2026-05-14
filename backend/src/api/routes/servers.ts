@@ -48,9 +48,9 @@ export function serverRoutes(deps: ServerRouteDeps) {
           faucetUrl: 'https://faucet.0g.ai',
           rpcUrl: 'https://evmrpc-testnet.0g.ai',
           chainId: 16601,
-          minRecommendedBalance: '1',
+          minRecommendedBalance: '4',
           tokenSymbol: 'OG',
-          note: 'Fund this address to enable inference for agents in this server.',
+          note: 'Fund this address with at least 4 OG. The 0G ledger requires a 3 OG minimum + gas reserve.',
         },
       }, 201);
     } catch (e) {

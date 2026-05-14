@@ -233,16 +233,25 @@ export interface PrepareInvocationInput {
   channel: ChannelDoc;
   peerSlugs: string[];
   speakerLabel: string;
+  /** True when the most recent message in the chain came from a human user (not another agent). */
+  speakerIsHuman: boolean;
 }
 
 export function prepareInvocationText(input: PrepareInvocationInput): string {
   const line = channelContextLine(input);
   const peers = input.peerSlugs.filter(s => s !== input.target.slug).map(s => '@' + s);
-  const protocol = peers.length > 0
-    ? `\n[CHANNEL PROTOCOL — read first]
-You are @${input.target.slug} in channel #${input.channel.name}, replying to ${input.speakerLabel}. Other agents in this channel: ${peers.join(', ')}.
 
-FORWARDING RULE: If the message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@"), end your reply with a line containing only that peer's @-handle (e.g., "@critic"). This rule applies even when your personality says "say nothing else" or "be terse" — invitations are an exception. Do this even if the peer name appears without the @ sign in the user's message. Only invite peers the user actually named.
+  // Only include the forwarding rule when a HUMAN is asking. Agent-to-agent invites should not
+  // recursively re-forward — that would cause runaway chains.
+  const includeForward = input.speakerIsHuman && peers.length > 0;
+  const protocol = includeForward
+    ? `\n[CHANNEL PROTOCOL — read first]
+You are @${input.target.slug} in channel #${input.channel.name}, replying to ${input.speakerLabel} (a human). Other agents available in this channel: ${peers.join(', ')}.
+
+FORWARDING RULE: If the human's message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@", e.g. "tell critic" or "@critic"), you MUST:
+  1. First give your full, substantive answer to the human's request — never reply with only an @-mention.
+  2. Then, on a NEW LINE at the END of your reply, write the peer's literal @-handle (e.g., "@critic") and nothing else on that line.
+This applies even if your personality says "say nothing else" — invitations are an exception, but your answer must still come first. Only invite peers the human actually named. Do not invite peers unless explicitly asked.
 [END PROTOCOL]\n`
     : '';
   return `${line}${protocol}\n${input.parent.content}`;
@@ -281,6 +290,7 @@ async function runInvocationLinked(args: {
   const chatId = chatIdForChannel(args.channel._id);
   const peerSlugs = await peerSlugsForChannel(args.db, args.channel);
   const speakerLabel = await speakerLabelFor(args.db, args.parent);
+  const speakerIsHuman = args.parent.authorType === 'user';
   for (const agent of args.agents) {
     try {
       const text = prepareInvocationText({
@@ -289,6 +299,7 @@ async function runInvocationLinked(args: {
         channel: args.channel,
         peerSlugs,
         speakerLabel,
+        speakerIsHuman,
       });
       const replyText = await invokeAgent({
         baseUrl: agent.baseUrl,

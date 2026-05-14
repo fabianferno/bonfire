@@ -33,15 +33,10 @@ export async function computeInvocationSet(ctx: InvocationContext): Promise<Agen
   }
   if (ids.size === 0) return [];
 
-  const idList = [...ids];
-  const members = await ctx.db.collection<ServerMemberDoc>(collections.serverMembers)
-    .find({ serverId: ctx.channel.serverId, principalType: 'agent' })
-    .toArray();
-  const memberIds = new Set(members.map(m => m.principalId.toHexString()));
-  const allowed = idList.filter(id => memberIds.has(id));
-
+  // Resolve to marketplace agents globally — no server-membership filter, so any registered
+  // agent can be summoned from any channel in any server.
   const agents: AgentDoc[] = [];
-  for (const id of allowed) {
+  for (const id of ids) {
     const a = await findAgentByIdOrSlug(ctx.db, id);
     if (a) agents.push(a);
   }
@@ -354,21 +349,19 @@ async function runInvocationLinked(args: {
 
 async function mentionsToAgents(
   db: Db,
-  channel: ChannelDoc,
+  _channel: ChannelDoc,
   mentions: { type: 'user' | 'agent'; id: ObjectId }[],
   visited: Set<string>,
 ): Promise<AgentDoc[]> {
+  // No server-membership filter — agents are global. Cascades follow @-mentions to any
+  // marketplace agent regardless of which server originated the chain.
   const ids = mentions
     .filter(m => m.type === 'agent')
     .map(m => m.id.toHexString())
     .filter(id => !visited.has(id));
   if (ids.length === 0) return [];
-  const members = await db.collection<ServerMemberDoc>(collections.serverMembers)
-    .find({ serverId: channel.serverId, principalType: 'agent' }).toArray();
-  const memberIds = new Set(members.map(m => m.principalId.toHexString()));
-  const allowed = ids.filter(id => memberIds.has(id));
   const out: AgentDoc[] = [];
-  for (const id of allowed) {
+  for (const id of ids) {
     const a = await findAgentByIdOrSlug(db, id);
     if (a) out.push(a);
   }

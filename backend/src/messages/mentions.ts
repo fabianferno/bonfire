@@ -11,14 +11,22 @@ export function extractHandles(content: string): string[] {
   return [...out];
 }
 
+/**
+ * Resolve `@<handle>` tokens in a message.
+ *
+ * Users are still scoped to the channel's server (mentioning a user from another server doesn't
+ * make sense — they can't see this channel). Agents are resolved GLOBALLY against the marketplace,
+ * so any agent registered in BonFire can be @-mentioned from any channel in any server. This
+ * enables agent-to-agent intercommunication across server boundaries.
+ */
 export async function resolveMentions(db: Db, serverId: ObjectId, content: string): Promise<MessageMention[]> {
   const handles = extractHandles(content);
   if (handles.length === 0) return [];
 
+  // Users: scope to server members (otherwise you'd be pinging someone who can't read the channel).
   const memberRows = await db.collection<ServerMemberDoc>(collections.serverMembers)
-    .find({ serverId }).toArray();
-  const userIds = memberRows.filter(m => m.principalType === 'user').map(m => m.principalId);
-  const agentIds = memberRows.filter(m => m.principalType === 'agent').map(m => m.principalId);
+    .find({ serverId, principalType: 'user' }).toArray();
+  const userIds = memberRows.map(m => m.principalId);
 
   const [users, agents] = await Promise.all([
     userIds.length
@@ -27,12 +35,11 @@ export async function resolveMentions(db: Db, serverId: ObjectId, content: strin
           { collation: ci }
         ).toArray()
       : Promise.resolve([] as UserDoc[]),
-    agentIds.length
-      ? db.collection<AgentDoc>(collections.agents).find(
-          { _id: { $in: agentIds }, slug: { $in: handles } },
-          { collation: ci }
-        ).toArray()
-      : Promise.resolve([] as AgentDoc[]),
+    // Agents: resolved globally — any marketplace agent is callable from anywhere.
+    db.collection<AgentDoc>(collections.agents).find(
+      { slug: { $in: handles } },
+      { collation: ci }
+    ).toArray(),
   ]);
 
   const out: MessageMention[] = [];

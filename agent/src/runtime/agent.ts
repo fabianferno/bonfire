@@ -110,30 +110,54 @@ export class AgentRuntime {
     // Build tenant-specific model (cached after first call).
     const model = await this.modelFor(tenant, msg.envOverride);
 
+    const baseArgs = {
+      model,
+      system,
+      messages,
+      temperature: this.d.loaded.config.llm.temperature,
+      maxTokens: this.d.loaded.config.llm.maxTokens,
+    };
+
+    let final: string | null = null;
+    let usageTokens = 0;
     try {
       const result = await generateText({
-        model,
-        system,
-        messages,
+        ...baseArgs,
         tools: this.d.getTools(),
         maxSteps: 8,
-        temperature: this.d.loaded.config.llm.temperature,
-        maxTokens: this.d.loaded.config.llm.maxTokens,
       });
-      const final = result.text || '(no response)';
-      this.sessions.append(sessionId, 'assistant', final);
-      await msg.reply(final);
-
-      if (this.d.embedModel) {
-        try {
-          const v = await embedText(this.d.embedModel, msg.text + '\n' + final);
-          this.d.store.indexVector(sessionId, `m:${Date.now()}`, msg.text.slice(0, 500), v);
-        } catch (e) { log.warn({ err: e }, 'embed/index failed'); }
-      }
-      this.sessions.maybeCompact(sessionId, result.usage?.totalTokens ?? 0);
+      final = result.text || null;
+      usageTokens = result.usage?.totalTokens ?? 0;
     } catch (e: any) {
-      log.error({ err: e }, 'agent loop failed');
-      await msg.reply(`error: ${e.message ?? String(e)}`);
+      const msg2 = String(e?.message ?? e);
+      const looksLikeToolHallucination = /unavailable tool|unknown tool|no such tool|invalid tool/i.test(msg2);
+      log.warn({ err: msg2, retryWithoutTools: looksLikeToolHallucination }, 'agent loop: generateText threw');
+      if (looksLikeToolHallucination) {
+        // Retry with tools disabled. The model hallucinated a function call to something that
+        // isn't a tool (e.g., trying to call another agent as a tool). Without tools available,
+        // it will reply in plain text, which is what we want for agent-to-agent comms.
+        try {
+          const retry = await generateText({ ...baseArgs, maxSteps: 1 });
+          final = retry.text || null;
+          usageTokens = retry.usage?.totalTokens ?? 0;
+        } catch (e2: any) {
+          log.error({ err: e2 }, 'agent loop: retry without tools also failed');
+        }
+      }
     }
+
+    if (!final) {
+      final = "_(I couldn't form a reply this turn.)_";
+    }
+    this.sessions.append(sessionId, 'assistant', final);
+    await msg.reply(final);
+
+    if (this.d.embedModel) {
+      try {
+        const v = await embedText(this.d.embedModel, msg.text + '\n' + final);
+        this.d.store.indexVector(sessionId, `m:${Date.now()}`, msg.text.slice(0, 500), v);
+      } catch (e) { log.warn({ err: e }, 'embed/index failed'); }
+    }
+    this.sessions.maybeCompact(sessionId, usageTokens);
   }
 }

@@ -50,7 +50,8 @@ describe('message routes', () => {
     expect(r.body.userMessage.content).toBe('find me papers on AI');
     expect(r.body.replies.length).toBe(1);
     expect(r.body.replies[0].authorType).toBe('agent');
-    expect(r.body.replies[0].content).toBe('replied to: find me papers on AI');
+    // The invocation text now includes an author-attribution preamble; the fake agent echoes it.
+    expect(r.body.replies[0].content).toContain('find me papers on AI');
 
     const list = await jsonReq(app, 'GET', `/v1/channels/${channel.id}/messages`, undefined, me.token);
     expect(list.body.messages.length).toBe(2);

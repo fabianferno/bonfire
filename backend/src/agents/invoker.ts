@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { collections } from '../db/types.js';
 import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc } from '../db/types.js';
 import { findAgentByIdOrSlug } from './registry.js';
+import { findUserById } from '../users/service.js';
 import { invokeAgent, openAgentStream } from './client.js';
 import { insertMessage } from '../messages/service.js';
 import { log } from '../util/logger.js';
@@ -190,6 +191,49 @@ export async function runCascade(ctx: CascadeContext): Promise<MessageDoc[]> {
   return out;
 }
 
+export function channelContextLine(args: {
+  channel: ChannelDoc;
+  target: AgentDoc;
+  peerSlugs: string[];
+  speakerLabel: string;
+}): string {
+  const peers = args.peerSlugs.filter(s => s !== args.target.slug).map(s => '@' + s).join(', ');
+  const base = `[${args.speakerLabel} → @${args.target.slug} in #${args.channel.name}`;
+  return peers ? `${base} | peers: ${peers}]` : `${base}]`;
+}
+
+export interface PrepareInvocationInput {
+  parent: MessageDoc;
+  target: AgentDoc;
+  channel: ChannelDoc;
+  peerSlugs: string[];
+  speakerLabel: string;
+}
+
+export function prepareInvocationText(input: PrepareInvocationInput): string {
+  const line = channelContextLine(input);
+  return `${line}\n${input.parent.content}`;
+}
+
+async function peerSlugsForChannel(db: Db, channel: ChannelDoc): Promise<string[]> {
+  const members = await db.collection<ServerMemberDoc>(collections.serverMembers)
+    .find({ serverId: channel.serverId, principalType: 'agent' }).toArray();
+  const ids = members.map(m => m.principalId);
+  if (ids.length === 0) return [];
+  const agents = await db.collection<AgentDoc>(collections.agents)
+    .find({ _id: { $in: ids } }, { projection: { slug: 1 } }).toArray();
+  return agents.map(a => a.slug);
+}
+
+async function speakerLabelFor(db: Db, parent: MessageDoc): Promise<string> {
+  if (parent.authorType === 'agent') {
+    const a = await findAgentByIdOrSlug(db, parent.authorId.toHexString());
+    return a ? '@' + a.slug : '@agent';
+  }
+  const u = await findUserById(db, parent.authorId);
+  return u ? '@' + u.username : '@user';
+}
+
 async function runInvocationLinked(args: {
   db: Db;
   channel: ChannelDoc;
@@ -200,12 +244,21 @@ async function runInvocationLinked(args: {
 }): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
   const chatId = chatIdForChannel(args.channel._id);
+  const peerSlugs = await peerSlugsForChannel(args.db, args.channel);
+  const speakerLabel = await speakerLabelFor(args.db, args.parent);
   for (const agent of args.agents) {
     try {
+      const text = prepareInvocationText({
+        parent: args.parent,
+        target: agent,
+        channel: args.channel,
+        peerSlugs,
+        speakerLabel,
+      });
       const replyText = await invokeAgent({
         baseUrl: agent.baseUrl,
         chatId,
-        text: args.parent.content,
+        text,
       });
       const persisted = await insertMessage(args.db, {
         channelId: args.channel._id,

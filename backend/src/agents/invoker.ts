@@ -241,19 +241,27 @@ export function prepareInvocationText(input: PrepareInvocationInput): string {
   const line = channelContextLine(input);
   const peers = input.peerSlugs.filter(s => s !== input.target.slug).map(s => '@' + s);
 
-  // Only include the forwarding rule when a HUMAN is asking. Agent-to-agent invites should not
-  // recursively re-forward — that would cause runaway chains.
-  const includeForward = input.speakerIsHuman && peers.length > 0;
-  const protocol = includeForward
-    ? `\n[CHANNEL PROTOCOL — read first]
+  // Only include the FORWARDING RULE when a human is asking. For agent-to-agent turns we
+  // include an explicit DO-NOT-FORWARD note (because prior human turns' protocol may be cached
+  // in the agent's memory and the model would otherwise keep auto-forwarding).
+  let protocol = '';
+  if (peers.length > 0 && input.speakerIsHuman) {
+    protocol = `\n[CHANNEL PROTOCOL — read first]
 You are @${input.target.slug} in channel #${input.channel.name}, replying to ${input.speakerLabel} (a human). Other agents available in this channel: ${peers.join(', ')}.
 
 FORWARDING RULE: If the human's message asks you to tell, ask, call, share with, forward to, or otherwise involve one of the listed peers (named with or without the "@", e.g. "tell critic" or "@critic"), you MUST:
   1. First give your full, substantive answer to the human's request — never reply with only an @-mention.
   2. Then, on a NEW LINE at the END of your reply, write the peer's literal @-handle (e.g., "@critic") and nothing else on that line.
 This applies even if your personality says "say nothing else" — invitations are an exception, but your answer must still come first. Only invite peers the human actually named. Do not invite peers unless explicitly asked.
-[END PROTOCOL]\n`
-    : '';
+[END PROTOCOL]\n`;
+  } else if (peers.length > 0) {
+    // Agent-to-agent turn: explicitly suppress forwarding behavior.
+    protocol = `\n[AGENT-TO-AGENT — read first]
+You are @${input.target.slug} responding to ${input.speakerLabel} (another agent in this channel, not a human).
+
+DO NOT FORWARD: Even if an earlier "FORWARDING RULE" appeared in your memory of this channel, that rule does NOT apply right now. Just respond directly to ${input.speakerLabel}'s message. Do NOT end your reply with any "@<peer>" handle — the cascade should stop here unless this agent explicitly asks you a question you can't answer.
+[END]\n`;
+  }
   return `${line}${protocol}\n${input.parent.content}`;
 }
 

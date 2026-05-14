@@ -4,6 +4,7 @@ export interface InboundMessage {
   userId: string;
   text: string;
   tenant?: string;
+  envOverride?: Record<string, string>;
   raw?: unknown;
   reply: (text: string, opts?: { stream?: boolean }) => Promise<void>;
   editLast?: (text: string) => Promise<void>;

@@ -1,6 +1,7 @@
 import { generateText, type CoreMessage, type LanguageModelV1, type Tool } from 'ai';
 import { buildSystemPrompt } from './prompt-builder.js';
 import { createChatModel } from './llm-client.js';
+import { hashEnv } from './env-hash.js';
 import type { LoadedAgent } from '../config/loader.js';
 import type { SkillRecord } from '../skills/loader.js';
 import type { MemoryStore } from '../memory/store.js';
@@ -31,33 +32,48 @@ export class AgentRuntime {
     this.sessions = new SessionManager(d.store, d.loaded.config.memory.compactAfterTokens);
     // Subscribe to registry changes to invalidate stale cached models.
     if (d.tenantRegistry) {
-      d.tenantRegistry.subscribe((slug) => { this.modelCache.delete(slug); });
+      d.tenantRegistry.subscribe((slug) => { this.invalidateTenantCache(slug); });
     }
   }
 
   /** Return a tenant-specific LanguageModelV1, building and caching it on first use. */
-  private async modelFor(tenant: Tenant | null): Promise<LanguageModelV1> {
-    if (!tenant) return this.d.model;
+  private async modelFor(tenant: Tenant | null, envOverride?: Record<string, string>): Promise<LanguageModelV1> {
+    const tenantEnv = tenant?.env ?? {};
+    const override = envOverride ?? {};
+    const effectiveEnv = { ...tenantEnv, ...override };
+    const tenantLlm = tenant?.llm ?? {};
     const hasOverrides =
-      Object.keys(tenant.env ?? {}).length > 0 ||
-      Object.keys(tenant.llm ?? {}).length > 0;
+      Object.keys(effectiveEnv).length > 0 ||
+      Object.keys(tenantLlm).length > 0;
     if (!hasOverrides) return this.d.model;
-    const cached = this.modelCache.get(tenant.slug);
+
+    const slug = tenant?.slug ?? '_default';
+    const cacheKey = `${slug}:${hashEnv(effectiveEnv)}`;
+    const cached = this.modelCache.get(cacheKey);
     if (cached) return cached;
+
     const mergedCfg = {
       ...this.d.loaded.config,
-      llm: { ...this.d.loaded.config.llm, ...(tenant.llm ?? {}) },
+      llm: { ...this.d.loaded.config.llm, ...tenantLlm },
     };
-    const tenantEnv = tenant.env ?? {};
-    const resolver = (k: string) => (tenantEnv[k] !== undefined ? tenantEnv[k] : process.env[k]);
+    const resolver = (k: string) => (effectiveEnv[k] !== undefined ? effectiveEnv[k] : process.env[k]);
     try {
       const handle = await createChatModel(mergedCfg, resolver);
-      this.modelCache.set(tenant.slug, handle.model);
+      this.modelCache.set(cacheKey, handle.model);
       return handle.model;
     } catch (e: any) {
-      log.warn({ tenant: tenant.slug, err: e?.message }, 'tenant model build failed; falling back to default');
+      log.warn({ tenant: slug, err: e?.message }, 'tenant model build failed; falling back to default');
       // Don't cache the fallback — try again next time (e.g., after config is fixed).
       return this.d.model;
+    }
+  }
+
+  /** Clear all cache entries for a given tenant slug (covers all env-hash variants). */
+  private invalidateTenantCache(slug: string): void {
+    for (const key of this.modelCache.keys()) {
+      if (key === slug || key.startsWith(`${slug}:`)) {
+        this.modelCache.delete(key);
+      }
     }
   }
 
@@ -92,7 +108,7 @@ export class AgentRuntime {
     this.sessions.append(sessionId, 'user', msg.text);
 
     // Build tenant-specific model (cached after first call).
-    const model = await this.modelFor(tenant);
+    const model = await this.modelFor(tenant, msg.envOverride);
 
     try {
       const result = await generateText({

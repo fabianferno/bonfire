@@ -14,7 +14,7 @@ import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
 import StatusBar from '@/components/layout/StatusBar';
 import DmSidebar, { upsertDmSession } from '@/components/dm/DmSidebar';
-import Avatar from 'boring-avatars';
+import Avatar from '@/components/shared/BoringAvatar';
 
 const CATEGORY_COLOR: Record<string, string> = {
   Research: '#8116E0',

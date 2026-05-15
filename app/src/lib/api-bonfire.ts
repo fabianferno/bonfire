@@ -197,10 +197,18 @@ export const bf = {
   },
 };
 
+export interface InstalledSkillSource {
+  slug?: string;
+  owner?: string;
+  contentSha?: string;
+  installed?: string;
+  sourceUrl?: string;
+}
+
 export interface InstalledSkill {
   name: string;
   description?: string;
-  source?: string;
+  source?: string | InstalledSkillSource;
 }
 
 export interface DiscoveredSkill {

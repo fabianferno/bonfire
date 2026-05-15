@@ -12,6 +12,7 @@ import { resolveMentions } from '../messages/mentions.js';
 import type { InftChain } from '../chain/inft.js';
 import type { OgStorageClient } from '../storage-0g/index.js';
 import { decryptAgentBundle } from './inft-decrypt.js';
+import { writeAudit } from '../audit/log.js';
 
 // ---------------------------------------------------------------------------
 // INFT invocation (bundle decrypt)
@@ -400,6 +401,7 @@ async function runInvocationLinked(args: {
   const speakerLabel = await speakerLabelFor(args.db, args.parent);
   const speakerIsHuman = args.parent.authorType === 'user';
   for (const agent of args.agents) {
+    const startMs = Date.now();
     try {
       // INFT bundle decryption (only when inftDeps injected)
       let tenantInline: TenantPayload | undefined;
@@ -411,6 +413,21 @@ async function runInvocationLinked(args: {
           continue;
         }
       }
+
+      await writeAudit(args.db, {
+        serverId: args.channel.serverId,
+        channelId: args.channel._id,
+        actorType: args.parent.authorType === 'user' ? 'user' : 'agent',
+        actorId: args.parent.authorId,
+        agentId: agent._id,
+        agentSlug: agent.slug,
+        action: 'agent_invoked',
+        payload: {
+          parentMessageId: args.parent._id.toHexString(),
+          cascadeHop: args.hop,
+          inputPreview: args.parent.content.slice(0, 200),
+        },
+      });
 
       const text = prepareInvocationText({
         parent: args.parent,
@@ -474,8 +491,36 @@ Your response (as @${agent.slug}):`;
         { $set: { parentMessageId: args.parent._id, cascadeRootId: args.rootId, cascadeHop: args.hop } }
       );
       const updated = await args.db.collection<MessageDoc>(collections.messages).findOne({ _id: persisted._id });
-      if (updated) out.push(updated);
+      if (updated) {
+        await writeAudit(args.db, {
+          serverId: args.channel.serverId,
+          channelId: args.channel._id,
+          actorType: 'agent',
+          actorId: agent._id,
+          agentId: agent._id,
+          agentSlug: agent.slug,
+          action: 'agent_replied',
+          payload: {
+            parentMessageId: args.parent._id.toHexString(),
+            cascadeHop: args.hop,
+            replyMessageId: updated._id.toHexString(),
+            replyPreview: replyText.slice(0, 200),
+            durationMs: Date.now() - startMs,
+          },
+        });
+        out.push(updated);
+      }
     } catch (e) {
+      await writeAudit(args.db, {
+        serverId: args.channel.serverId,
+        channelId: args.channel._id,
+        actorType: 'system',
+        actorId: null,
+        agentId: agent._id,
+        agentSlug: agent.slug,
+        action: 'agent_failed',
+        payload: { error: (e as Error).message?.slice(0, 300) },
+      });
       log.warn({ agent: agent.slug, err: e }, 'agent invocation failed');
       const failureMsg = await insertMessage(args.db, {
         channelId: args.channel._id,

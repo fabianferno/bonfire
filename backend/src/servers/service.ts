@@ -62,6 +62,30 @@ export async function createServer(db: Db, input: CreateServerInput): Promise<{ 
   };
   await db.collection<ChannelDoc>(collections.channels).insertOne(defaultChannel);
 
+  const voiceChannel: ChannelDoc = {
+    _id: new OID(),
+    serverId: server._id,
+    name: 'general-voice',
+    topic: null,
+    type: 'voice',
+    defaultAgentId: null,
+    position: 1,
+    createdAt: now,
+  };
+  await db.collection<ChannelDoc>(collections.channels).insertOne(voiceChannel);
+
+  const auditChannel: ChannelDoc = {
+    _id: new OID(),
+    serverId: server._id,
+    name: 'audit-log',
+    topic: null,
+    type: 'audit',
+    defaultAgentId: null,
+    position: 2,
+    createdAt: now,
+  };
+  await db.collection<ChannelDoc>(collections.channels).insertOne(auditChannel);
+
   return { server, defaultChannel, ownerMember };
 }
 
@@ -96,6 +120,7 @@ export async function listServerMembers(db: Db, serverId: ObjectId, type?: Princ
 
 export async function addMember(db: Db, input: {
   serverId: ObjectId; principalType: PrincipalType; principalId: ObjectId; role?: MemberRole; alias?: string | null;
+  paidTxHash?: string; paidAmount?: string; paidByUserId?: ObjectId;
 }): Promise<ServerMemberDoc> {
   const doc: ServerMemberDoc = {
     _id: new OID(),
@@ -106,6 +131,9 @@ export async function addMember(db: Db, input: {
     alias: input.alias ?? null,
     joinedAt: new Date(),
   };
+  if (input.paidTxHash !== undefined) doc.paidTxHash = input.paidTxHash;
+  if (input.paidAmount !== undefined) doc.paidAmount = input.paidAmount;
+  if (input.paidByUserId !== undefined) doc.paidByUserId = input.paidByUserId;
   await db.collection<ServerMemberDoc>(collections.serverMembers).insertOne(doc);
   return doc;
 }

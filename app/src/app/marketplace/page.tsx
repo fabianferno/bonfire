@@ -9,7 +9,7 @@ import { bf } from '@/lib/api-bonfire';
 import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
 import { useAuth } from '@/components/auth/AuthProvider';
 import type { BackendAgent } from '@/lib/types';
-import InviteToServerModal from '@/components/marketplace/InviteToServerModal';
+import InviteAgentToServerModal from '@/components/marketplace/InviteAgentToServerModal';
 import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
 import StatusBar from '@/components/layout/StatusBar';
@@ -47,6 +47,24 @@ function MarketplaceAgentCardBanner({ agent }: { agent: BackendAgent }) {
     </div>
   );
 }
+// ── Price label ───────────────────────────────────────────────────────────────
+
+function PriceLabel({ agent }: { agent: BackendAgent }) {
+  const price = parseFloat(agent.priceOg ?? '0');
+  const priced = Number.isFinite(price) && price > 0;
+  return (
+    <span
+      className="text-xs px-2 py-0.5 rounded font-semibold"
+      style={{
+        background: priced ? 'rgba(251,191,36,0.15)' : 'rgba(67,181,129,0.15)',
+        color: priced ? '#fbbf24' : '#43b581',
+      }}
+    >
+      {priced ? `${agent.priceOg} OG` : 'Free'}
+    </span>
+  );
+}
+
 // ── Detail overlay ────────────────────────────────────────────────────────────
 
 function AgentDetailOverlay({
@@ -60,6 +78,9 @@ function AgentDetailOverlay({
   onInvite: (a: BackendAgent) => void;
   onMessage: (a: BackendAgent) => void;
 }) {
+  const agentPrice = parseFloat(agent.priceOg ?? '0');
+  const priced = Number.isFinite(agentPrice) && agentPrice > 0;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
@@ -107,9 +128,12 @@ function AgentDetailOverlay({
           </button>
           <button
             onClick={() => { onInvite(agent); onClose(); }}
-            className="px-5 py-2 rounded-lg text-sm font-bold text-white"
+            className="px-5 py-2 rounded-lg text-sm font-bold text-white flex items-center gap-2"
             style={{ background: 'var(--bf-accent)' }}
           >
+            {priced && (
+              <span className="text-xs font-semibold opacity-90">{agent.priceOg} OG</span>
+            )}
             Add to Server
           </button>
         </div>
@@ -121,6 +145,7 @@ function AgentDetailOverlay({
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-white text-2xl font-bold">{agent.name}</h2>
               <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: 'var(--bf-accent)', color: 'white' }}>BOT</span>
+              <PriceLabel agent={agent} />
             </div>
             <p className="text-sm mb-1" style={{ color: 'var(--bf-gray)' }}>@{agent.slug}</p>
             <p className="text-sm mb-4" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
@@ -153,6 +178,11 @@ function AgentDetailOverlay({
               <div className="flex flex-col gap-2">
                 <DetailRow label="Slug" value={`@${agent.slug}`} />
                 <DetailRow label="Created" value={new Date(agent.createdAt).toLocaleDateString()} />
+                <DetailRow
+                  label="Invite price"
+                  value={priced ? `${agent.priceOg} OG` : 'Free'}
+                  color={priced ? '#fbbf24' : '#43b581'}
+                />
               </div>
             </div>
           </div>
@@ -386,6 +416,7 @@ function MarketplaceInner() {
                             <div className="pt-8 px-4 pb-4">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-bold text-white text-sm">{agent.name}</span>
+                                <PriceLabel agent={agent} />
                               </div>
                               <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
                               <div className="flex items-center justify-end gap-2">
@@ -468,6 +499,7 @@ function MarketplaceInner() {
                                     </span>
                                   )}
                                 </div>
+                                <PriceLabel agent={agent} />
                               </div>
                               <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
                               <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
@@ -517,7 +549,7 @@ function MarketplaceInner() {
 
       {/* Invite modal */}
       {inviteTarget && (
-        <InviteToServerModal
+        <InviteAgentToServerModal
           agent={inviteTarget}
           onClose={() => setInviteTarget(null)}
         />

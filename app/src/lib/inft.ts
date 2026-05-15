@@ -96,3 +96,43 @@ export function useMintAgent() {
 
   return { mint };
 }
+
+/**
+ * Returns `{ payAndGetTxHash }` — a helper for sending a native OG token
+ * transfer to an agent owner's wallet as a pre-payment before invite.
+ *
+ * @example
+ * ```tsx
+ * const { payAndGetTxHash } = useSendOgPayment();
+ * const txHash = await payAndGetTxHash(agent.ownerWallet, agent.priceOg);
+ * ```
+ */
+export function useSendOgPayment() {
+  const { sendTransaction } = useSendTransaction();
+
+  async function payAndGetTxHash(toAddress: string, amountOg: string): Promise<string> {
+    // Convert OG decimal string (e.g. "0.5") to wei (18 decimals)
+    const parts = amountOg.split('.');
+    const whole = BigInt(parts[0] ?? '0');
+    const decimals = (parts[1] ?? '').padEnd(18, '0').slice(0, 18);
+    const valueWei = whole * BigInt('1000000000000000000') + BigInt(decimals);
+
+    try {
+      const result = await sendTransaction({
+        to: toAddress,
+        value: valueWei,
+        chainId: OG_TESTNET_CHAIN_ID,
+      });
+      return result.hash;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const hashMatch = msg.match(/0x[a-fA-F0-9]{64}/);
+      if (hashMatch && /receipt|not be found|not be processed/i.test(msg)) {
+        return hashMatch[0];
+      }
+      throw err;
+    }
+  }
+
+  return { payAndGetTxHash };
+}

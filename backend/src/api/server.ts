@@ -10,6 +10,7 @@ import { messageRoutes } from './routes/messages.js';
 import { internalRoutes } from './routes/internal.js';
 import { cascadeRoutes } from './routes/cascade.js';
 import { voiceRoutes } from './routes/voice.js';
+import { auditRoutes } from './routes/audit.js';
 import type { InftDeps } from '../agents/invoker.js';
 import type { VoiceManager } from '../voice/manager.js';
 
@@ -79,6 +80,7 @@ export function buildApp(deps: AppDeps) {
   app.route('/', messageRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, cascadeConfig: deps.cascadeConfig, inftDeps: deps.inftDeps }));
   app.route('/', internalRoutes({ db: deps.db }));
   app.route('/', cascadeRoutes(deps));
+  app.route('/', auditRoutes({ db: deps.db, jwtSecret: deps.jwtSecret }));
   if (deps.voiceManager) {
     app.route('/', voiceRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, voiceManager: deps.voiceManager }));
   }

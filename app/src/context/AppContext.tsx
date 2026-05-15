@@ -22,7 +22,7 @@ import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 
 // ─── Public types (kept stable so existing components compile) ─────────────
 
-export type ChannelType = "text" | "voice";
+export type ChannelType = "text" | "voice" | "audit";
 export type AgentStatus = "online" | "busy" | "idle" | "offline";
 export type AcquisitionMode = "owned" | "rented" | "licensed";
 
@@ -113,6 +113,7 @@ export interface Server {
   color: string;
   icon?: string;
   description?: string;
+  ownerId: string;
   channels: Channel[];
   agents: Agent[];
   members: Member[];
@@ -191,6 +192,7 @@ function mapServer(s: BackendServer): Omit<Server, "channels" | "agents" | "memb
     color: "#f97316", // backend has no color — use default fire orange
     icon: s.iconUrl ?? undefined,
     description: undefined,
+    ownerId: s.ownerId,
     balance: 0,
     spentToday: 0,
     auditLog: [],
@@ -198,10 +200,11 @@ function mapServer(s: BackendServer): Omit<Server, "channels" | "agents" | "memb
 }
 
 function mapChannel(c: BackendChannel): Channel {
+  const type: ChannelType = c.type === "voice" ? "voice" : c.type === "audit" ? "audit" : "text";
   return {
     id: c.id,
     name: c.name,
-    type: "text",
+    type,
     description: c.topic ?? undefined,
     messages: [],
     defaultAgentId: c.defaultAgentId ?? undefined,
@@ -457,19 +460,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .filter((c) => c.type === "text")
           .map(mapChannel);
 
-        // Voice channels live purely on the client (backend has no voice type).
-        // Persist them per-server in localStorage so they survive reloads.
+        // Voice channels: prefer what the backend returns (auto-spawned general-voice
+        // and any user-created voice channels). Fall back to localStorage-persisted
+        // channels for offline / legacy servers, then to a hard-coded default.
         const voiceKey = `bonfire_voice_${activeServerId}`;
-        let voiceChannels: Channel[] = [];
-        try {
-          const stored = typeof window !== "undefined" ? localStorage.getItem(voiceKey) : null;
-          voiceChannels = stored ? JSON.parse(stored) : [];
-        } catch { /* ignore */ }
+        let voiceChannels: Channel[] = rawCh
+          .filter((c) => c.type === "voice")
+          .map(mapChannel);
+
+        if (voiceChannels.length === 0) {
+          // Backend didn't return any voice channels — try localStorage
+          try {
+            const stored = typeof window !== "undefined" ? localStorage.getItem(voiceKey) : null;
+            voiceChannels = stored ? JSON.parse(stored) : [];
+          } catch { /* ignore */ }
+        }
         // Always ensure at least one default voice channel
         if (voiceChannels.length === 0) {
           voiceChannels = [{ id: `voice-${activeServerId}`, name: "General Voice", type: "voice", description: "", messages: [] }];
           try { if (typeof window !== "undefined") localStorage.setItem(voiceKey, JSON.stringify(voiceChannels)); } catch { /* ignore */ }
         }
+
+        // Audit channels — kept as-is; UI components gate visibility to owner only.
+        const auditChannels: Channel[] = rawCh
+          .filter((c) => c.type === "audit")
+          .map(mapChannel);
 
         // Separate agent vs user members
         const agentMembers = rawMembers.filter((m) => m.principalType === "agent");
@@ -497,7 +512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setServers((prev) =>
           prev.map((s) => {
             if (s.id !== activeServerId) return s;
-            return { ...s, channels: [...textChannels, ...voiceChannels], agents, members };
+            return { ...s, channels: [...textChannels, ...voiceChannels, ...auditChannels], agents, members };
           }),
         );
 

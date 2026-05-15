@@ -110,5 +110,7 @@ export function publicAgent(a: AgentDoc) {
     baseUrl: a.baseUrl,
     createdBy: a.createdBy ? a.createdBy.toHexString() : null,
     createdAt: a.createdAt.toISOString(),
+    priceOg: a.priceOg ?? '0',
+    ownerWallet: a.ownerWallet ?? null,
   };
 }

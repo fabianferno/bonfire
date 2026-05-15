@@ -52,6 +52,7 @@ const PatchAgentBody = z.object({
   agents: z.string().max(10_000).optional(),
   env: z.record(z.string(), z.string()).optional(),
   llm: TenantLlmOverrideSchema.optional(),
+  priceOg: z.string().regex(/^\d+(\.\d+)?$/).optional(),
 });
 
 export interface AgentRouteDeps { db: Db; jwtSecret: string; }
@@ -168,6 +169,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
     if (parsed.data.avatarUrl !== undefined) $set.avatarUrl = parsed.data.avatarUrl;
     if (parsed.data.tags !== undefined) $set.tags = parsed.data.tags;
     if (parsed.data.baseUrl !== undefined) $set.baseUrl = parsed.data.baseUrl;
+    if (parsed.data.priceOg !== undefined) $set.priceOg = parsed.data.priceOg;
     const updated = await deps.db.collection(collections.agents).findOneAndUpdate(
       { _id: a._id }, { $set }, { returnDocument: 'after' }
     );

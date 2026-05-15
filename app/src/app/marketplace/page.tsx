@@ -11,6 +11,7 @@ import type { BackendAgent } from '@/lib/types';
 import InviteToServerModal from '@/components/marketplace/InviteToServerModal';
 import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
+import StatusBar from '@/components/layout/StatusBar';
 import DmSidebar, { upsertDmSession } from '@/components/dm/DmSidebar';
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -316,16 +317,16 @@ function MarketplaceInner() {
 
   return (
     <>
-      <div className="flex h-full" style={{ background: 'var(--bf-tertiary)' }}>
+      <div className="flex flex-col h-full w-full overflow-hidden" style={{ background: 'var(--bf-tertiary)' }}>
+        <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+          {/* Server rail */}
+          <LeftNav />
 
-        {/* Server rail */}
-        <LeftNav />
+          {/* DM sidebar */}
+          <DmSidebar />
 
-        {/* DM sidebar */}
-        <DmSidebar />
-
-        {/* Main content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Main content */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
           {/* Hero banner */}
           <div className="relative flex-shrink-0" style={{ background: 'var(--bf-brand-hero-gradient)' }}>
@@ -495,6 +496,8 @@ function MarketplaceInner() {
             </div>
           </div>
         </div>
+        </div>
+        <StatusBar />
       </div>
 
       {/* Detail overlay */}

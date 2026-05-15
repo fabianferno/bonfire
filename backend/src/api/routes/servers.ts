@@ -10,7 +10,7 @@ import {
   SlugTakenError, createServer, listServersForUser, publicServer,
   listServerMembers, publicMember, addMember, ownerWallet,
 } from '../../servers/service.js';
-import { fetchOnchainBalance } from '../../servers/wallet.js';
+import { fetchOnchainBalance, withdrawFromServerWallet } from '../../servers/wallet.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
 
@@ -172,6 +172,34 @@ export function serverRoutes(deps: ServerRouteDeps) {
         tokenSymbol: 'OG',
       },
     });
+  });
+
+  const WithdrawBody = z.object({
+    toAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    amount: z.string().regex(/^\d+(\.\d+)?$/),
+  });
+
+  app.post('/v1/servers/:sid/wallet/withdraw', requireAuth, requireServerMember(deps.db, 'owner'), async (c) => {
+    const server = c.get('server');
+    if (!server.wallet) return c.json({ error: 'no_wallet' }, 404);
+    const parsed = WithdrawBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
+
+    const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai';
+    try {
+      const result = await withdrawFromServerWallet({
+        rpcUrl,
+        privateKey: server.wallet.privateKey,
+        toAddress: parsed.data.toAddress,
+        amountOg: parsed.data.amount,
+      });
+      return c.json(result);
+    } catch (e: any) {
+      const code = e?.code;
+      if (code === 'invalid_to_address' || code === 'invalid_amount') return c.json({ error: code }, 400);
+      if (code === 'insufficient_balance') return c.json({ error: code, message: e.message }, 400);
+      throw e;
+    }
   });
 
   app.delete('/v1/servers/:sid/members/:mid', requireAuth, requireServerMember(deps.db), async (c) => {

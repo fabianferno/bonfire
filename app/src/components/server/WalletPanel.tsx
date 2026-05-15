@@ -2,6 +2,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { bf } from '@/lib/api-bonfire';
 import type { BackendServerWallet, BackendServerFunding } from '@/lib/types';
+import Modal, { ModalLabel, ModalInput } from '@/components/shared/Modal';
+import { useFundServerWallet } from '@/lib/server-wallet';
+import { useAuth } from '@/components/auth/AuthProvider';
 
 interface Props {
   serverId: string;
@@ -27,6 +30,7 @@ export default function WalletPanel({ serverId }: Props) {
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [action, setAction] = useState<'topup' | 'withdraw' | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -115,6 +119,24 @@ export default function WalletPanel({ serverId }: Props) {
         {short}
       </code>
 
+      <div className="flex gap-1.5 mt-2">
+        <button
+          onClick={() => setAction('topup')}
+          className="flex-1 px-2 py-1 rounded text-xs font-semibold"
+          style={{ background: 'var(--bf-accent)', color: 'var(--bf-primary)' }}
+        >
+          Top Up
+        </button>
+        <button
+          onClick={() => setAction('withdraw')}
+          disabled={!bal || bal <= 0.05}
+          className="flex-1 px-2 py-1 rounded text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'var(--bf-quinary)', color: 'var(--bf-white)' }}
+        >
+          Withdraw
+        </button>
+      </div>
+
       {lowBalance && funding && (
         <a
           href={funding.faucetUrl}
@@ -126,6 +148,122 @@ export default function WalletPanel({ serverId }: Props) {
           Fund at faucet →
         </a>
       )}
+
+      {action && wallet && (
+        <WalletActionModal
+          mode={action}
+          serverId={serverId}
+          serverWalletAddress={wallet.address}
+          balance={balance}
+          onClose={() => setAction(null)}
+          onComplete={() => { setAction(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+interface WalletActionProps {
+  mode: 'topup' | 'withdraw';
+  serverId: string;
+  serverWalletAddress: string;
+  balance: string | null;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+function WalletActionModal({ mode, serverId, serverWalletAddress, balance, onClose, onComplete }: WalletActionProps) {
+  const { user } = useAuth();
+  const { fund } = useFundServerWallet();
+  const isTopUp = mode === 'topup';
+
+  // Sensible defaults: top-up = 4 OG (matches min recommended); withdraw =
+  // current balance minus a 0.05 OG gas reserve, never negative.
+  const defaultAmount = isTopUp
+    ? '4'
+    : (() => {
+        const b = balance !== null ? Number(balance) : 0;
+        const max = Math.max(0, b - 0.05);
+        return max > 0 ? max.toFixed(4) : '0';
+      })();
+
+  const [amount, setAmount] = useState(defaultAmount);
+  const [toAddress, setToAddress] = useState(user?.walletAddress ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!/^\d+(\.\d+)?$/.test(amount.trim()) || Number(amount) <= 0) {
+      setErr('Enter a positive amount.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (isTopUp) {
+        await fund({ toAddress: serverWalletAddress, amountOg: amount.trim() });
+      } else {
+        if (!/^0x[a-fA-F0-9]{40}$/.test(toAddress.trim())) {
+          setErr('Enter a valid 0x destination address.');
+          setSubmitting(false);
+          return;
+        }
+        await bf.withdrawFromServerWallet(serverId, {
+          toAddress: toAddress.trim(),
+          amount: amount.trim(),
+        });
+      }
+      onComplete();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={isTopUp ? 'Top Up Server Wallet' : 'Withdraw From Server Wallet'}
+      subtitle={
+        isTopUp
+          ? 'Send OG from your connected wallet to this server’s wallet.'
+          : 'Send OG from this server’s wallet to any 0G address.'
+      }
+      onClose={onClose}
+      onConfirm={submit}
+      confirmDisabled={submitting}
+      confirmLabel={submitting ? 'Sending…' : isTopUp ? 'Send' : 'Withdraw'}
+    >
+      {!isTopUp && (
+        <div>
+          <ModalLabel>Destination address</ModalLabel>
+          <ModalInput
+            value={toAddress}
+            onChange={(e) => setToAddress(e.target.value)}
+            placeholder="0x…"
+            spellCheck={false}
+          />
+          {user?.walletAddress && toAddress !== user.walletAddress && (
+            <button
+              onClick={() => setToAddress(user.walletAddress!)}
+              className="text-xs underline mt-1"
+              style={{ color: 'var(--bf-accent)' }}
+            >
+              Use my wallet ({user.walletAddress.slice(0, 6)}…{user.walletAddress.slice(-4)})
+            </button>
+          )}
+        </div>
+      )}
+      <div>
+        <ModalLabel>Amount (OG)</ModalLabel>
+        <ModalInput value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="4" />
+        {!isTopUp && balance !== null && (
+          <p className="text-xs mt-1" style={{ color: 'var(--bf-symbol)' }}>
+            Server balance: {Number(balance).toFixed(4)} OG (≈0.05 reserved for gas).
+          </p>
+        )}
+      </div>
+      {err && <p className="text-xs" style={{ color: '#f05b5b' }}>{err}</p>}
+    </Modal>
   );
 }

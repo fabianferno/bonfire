@@ -6,6 +6,7 @@ import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import WalletFundingModal from "@/components/server/WalletFundingModal";
 import type { BackendServerWallet, BackendServerFunding } from "@/lib/types";
 import { BF_BRAND_EMOJI } from "@/lib/brand";
+import { useFundServerWallet } from "@/lib/server-wallet";
 
 const SERVER_COLORS = ["#f97316", "var(--bf-fire)", "var(--bf-accent)", "#f04747", "#faa61a", "#6633cc", "#00d8ff", "#ed1b24"];
 
@@ -37,11 +38,15 @@ function SolidCompassIcon({ size = 22 }: { size?: number }) {
 
 export default function LeftNav() {
   const { servers, activeServerId, setActiveServer, createServer } = useApp();
+  const { fund } = useFundServerWallet();
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState("");
   const [color, setColor] = useState(SERVER_COLORS[0]);
   const [desc, setDesc] = useState("");
+  const [initialFund, setInitialFund] = useState("4");
+  const [creating, setCreating] = useState(false);
+  const [fundingError, setFundingError] = useState<string | null>(null);
   const [fundingState, setFundingState] = useState<FundingState | null>(null);
 
   useEffect(() => {
@@ -53,15 +58,38 @@ export default function LeftNav() {
   const handleCreate = async () => {
     if (!name.trim()) return;
     const serverName = name.trim();
-    setName(""); setDesc(""); setColor(SERVER_COLORS[0]);
-    setShowModal(false);
+    const fundAmount = initialFund.trim();
+    // Validate fund amount before creating the server so a typo doesn't leave
+    // us with an empty workspace + a confusing error.
+    if (fundAmount && !/^\d+(\.\d+)?$/.test(fundAmount)) {
+      setFundingError("Initial fund must be a number (or empty to skip).");
+      return;
+    }
+    setCreating(true);
+    setFundingError(null);
     try {
       const result = await createServer(serverName, color, desc.trim());
+      // Reset form fields only after the server creation succeeds.
+      setName(""); setDesc(""); setColor(SERVER_COLORS[0]); setInitialFund("4");
+      setShowModal(false);
       if (result.wallet && result.funding) {
         setFundingState({ wallet: result.wallet, funding: result.funding, serverName });
+        if (fundAmount && Number(fundAmount) > 0) {
+          // Fire-and-forget Privy signing — failure here just means the user
+          // declined or had insufficient funds; the WalletFundingModal still
+          // shows the address + faucet link as a fallback.
+          try {
+            await fund({ toAddress: result.wallet.address, amountOg: fundAmount });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setFundingError(`Initial fund failed: ${msg}. You can fund manually from the wallet panel.`);
+          }
+        }
       }
     } catch {
       // createServer already surfaces the error via AppContext's error state
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -142,8 +170,8 @@ export default function LeftNav() {
           subtitle="Give your agent workspace a name and colour."
           onClose={() => setShowModal(false)}
           onConfirm={handleCreate}
-          confirmDisabled={!name.trim()}
-          confirmLabel="Create Server"
+          confirmDisabled={!name.trim() || creating}
+          confirmLabel={creating ? "Creating…" : "Create Server"}
         >
           <div>
             <ModalLabel>Server Name</ModalLabel>
@@ -162,6 +190,20 @@ export default function LeftNav() {
               onChange={e => setDesc(e.target.value)}
               placeholder="What does this server do?"
             />
+          </div>
+          <div>
+            <ModalLabel>Initial fund (OG)</ModalLabel>
+            <ModalInput
+              value={initialFund}
+              onChange={e => setInitialFund(e.target.value)}
+              placeholder="4"
+            />
+            <p className="text-xs mt-1" style={{ color: "var(--bf-symbol)" }}>
+              Sent from your wallet to the server&apos;s wallet on creation. Min 4 OG recommended (3 OG ledger minimum + gas). Leave blank to fund later.
+            </p>
+            {fundingError && (
+              <p className="text-xs mt-1" style={{ color: "#f05b5b" }}>{fundingError}</p>
+            )}
           </div>
           <div>
             <ModalLabel>Colour</ModalLabel>

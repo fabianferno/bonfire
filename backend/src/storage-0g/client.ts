@@ -131,8 +131,30 @@ function createRealStorage(): OgStorageClient {
       const indexer = new Indexer(indexerUrl);
       const file = new MemData(data);
 
-      const [tx, err] = await indexer.upload(file, rpcUrl, signer as any);
-      if (err) throw new Error(`0G upload failed for key "${key}": ${err.message ?? err}`);
+      // Galileo testnet's Flow contract intermittently reverts on submit() with a bare
+      // `require(false)` — usually transient. Retry with exponential backoff.
+      const maxAttempts = Number(process.env.OG_UPLOAD_MAX_ATTEMPTS ?? 5);
+      let tx: any = null;
+      let lastErr: any = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const [resTx, resErr] = await indexer.upload(file, rpcUrl, signer as any);
+        if (!resErr) { tx = resTx; lastErr = null; break; }
+        lastErr = resErr;
+        const msg = String(resErr?.message ?? resErr);
+        const retriable =
+          msg.includes('require(false)') ||
+          msg.includes('CALL_EXCEPTION') ||
+          msg.includes('execution reverted') ||
+          msg.includes('NETWORK_ERROR') ||
+          msg.includes('TIMEOUT') ||
+          msg.includes('SERVER_ERROR');
+        if (!retriable || attempt === maxAttempts) break;
+        const delayMs = Math.min(15000, 1000 * 2 ** (attempt - 1));
+        // eslint-disable-next-line no-console
+        console.warn(`0G upload attempt ${attempt}/${maxAttempts} failed for "${key}": ${msg.slice(0, 200)} — retrying in ${delayMs}ms`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      if (lastErr) throw new Error(`0G upload failed for key "${key}" after ${maxAttempts} attempts: ${lastErr.message ?? lastErr}`);
 
       const rootHash: string =
         (tx && (tx.rootHash || tx.root || tx.hash)) ||

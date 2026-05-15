@@ -26,6 +26,9 @@ export const bf = {
       'GET', `/v1/servers/${sid}/wallet`
     ),
 
+  withdrawFromServerWallet: (sid: string, body: { toAddress: string; amount: string }) =>
+    api<{ txHash: string; balance: string }>('POST', `/v1/servers/${sid}/wallet/withdraw`, body),
+
   getChannels: (sid: string) =>
     api<{ channels: BackendChannel[] }>('GET', `/v1/servers/${sid}/channels`),
 

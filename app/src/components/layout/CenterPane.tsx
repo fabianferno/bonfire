@@ -10,6 +10,7 @@ import Avatar from "@/components/shared/Avatar";
 import { BF_BRAND_EMOJI } from "@/lib/brand";
 import { appAgentAvatarSrc } from "@/lib/agent-identicon";
 import { resolveGreetingName, greetingUsesFallback } from "@/lib/greeting-name";
+import AuditLogPane from "@/components/audit/AuditLogPane";
 
 export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
@@ -26,6 +27,12 @@ export default function CenterPane() {
   }
 
   const isVoice = activeChannel.type === "voice";
+  const isAudit = activeChannel.type === "audit";
+
+  // Audit channels get their own self-contained pane.
+  if (isAudit) {
+    return <AuditLogPane channelId={activeChannel.id} />;
+  }
 
   return (
     <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "var(--bf-primary)" }}>

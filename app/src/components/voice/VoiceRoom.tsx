@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Headphones, Mic, MicOff, PhoneOff, UserPlus, X } from "lucide-react";
+import { Headphones, HeadphoneOff, Mic, MicOff, PhoneOff, UserPlus, X } from "lucide-react";
 import type { DailyCall } from "@daily-co/daily-js";
-import { DailyProvider } from "@daily-co/daily-react";
+import { DailyProvider, DailyAudio } from "@daily-co/daily-react";
 import { voiceApi, type VoiceSession, type VoiceBot } from "@/lib/voice";
 import VoiceParticipantTile from "./VoiceParticipantTile";
 import { useVoiceCall } from "./useVoiceCall";
@@ -25,7 +25,7 @@ function VoiceRoomInner({
   session,
   onClose,
 }: VoiceRoomProps & { session: VoiceSession }) {
-  const { joinState, participants, micMuted, toggleMic, leave, error } =
+  const { joinState, participants, micMuted, toggleMic, deafened, toggleDeafen, leave, error } =
     useVoiceCall({ roomUrl: session.roomUrl, token: session.token });
 
   const didLeaveRef = useRef(false);
@@ -111,6 +111,10 @@ function VoiceRoomInner({
 
   return (
     <>
+    {/* DailyAudio renders <audio> elements for every remote participant so we
+        can actually HEAR them. Without this, daily-react never plays remote
+        audio (it doesn't auto-play remote tracks). Position absolutely off-screen. */}
+    <DailyAudio />
     <div
       className="fixed inset-0 z-50 flex flex-col"
       style={{ background: "rgba(17,18,20,0.97)" }}
@@ -179,7 +183,10 @@ function VoiceRoomInner({
                 <Headphones size={36} style={{ color: "var(--bf-gray)" }} strokeWidth={1} />
               </div>
               <p className="text-white font-semibold">
-                {joinState === "joining" ? "Connecting to voice channel…" : "No participants yet"}
+                {joinState === "joining" ? "Connecting to voice channel…" : "You're alone in here"}
+              </p>
+              <p className="text-xs" style={{ color: "var(--bf-gray)" }}>
+                {joinState === "joined" ? "Invite an agent to start the conversation." : ""}
               </p>
               <button
                 onClick={() => setShowInviteModal(true)}
@@ -285,11 +292,13 @@ function VoiceRoomInner({
         className="flex items-center justify-center gap-4 py-5 flex-shrink-0"
         style={{ borderTop: "1px solid var(--bf-border)" }}
       >
-        {/* Mute toggle */}
+        {/* Mute mic */}
         <button
-          title={micMuted ? "Unmute" : "Mute"}
+          title={micMuted ? "Unmute microphone" : "Mute microphone"}
+          aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
+          aria-pressed={micMuted}
           onClick={toggleMic}
-          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors hover:opacity-90"
           style={{
             background: micMuted ? "var(--bf-red)" : "var(--bf-quinary)",
             color: "white",
@@ -298,11 +307,27 @@ function VoiceRoomInner({
           {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
         </button>
 
+        {/* Deafen (mute incoming audio + force-mute mic) */}
+        <button
+          title={deafened ? "Undeafen (resume incoming audio)" : "Deafen (mute everyone)"}
+          aria-label={deafened ? "Undeafen" : "Deafen"}
+          aria-pressed={deafened}
+          onClick={toggleDeafen}
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-colors hover:opacity-90"
+          style={{
+            background: deafened ? "var(--bf-red)" : "var(--bf-quinary)",
+            color: "white",
+          }}
+        >
+          {deafened ? <HeadphoneOff size={20} /> : <Headphones size={20} />}
+        </button>
+
         {/* Leave */}
         <button
           title="Leave voice channel"
+          aria-label="Leave voice channel"
           onClick={handleLeave}
-          className="w-12 h-12 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+          className="w-12 h-12 rounded-full flex items-center justify-center transition-opacity hover:opacity-80 ml-2"
           style={{ background: "var(--bf-red)", color: "white" }}
         >
           <PhoneOff size={20} />

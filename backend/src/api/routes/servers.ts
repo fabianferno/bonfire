@@ -4,13 +4,15 @@ import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
 import { requireUser } from '../../auth/middleware.js';
 import { requireServerMember, type ServerBindings } from '../../servers/middleware.js';
-import type { ChannelDoc } from '../../db/types.js';
+import type { AgentDoc, ChannelDoc } from '../../db/types.js';
 import { collections } from '../../db/types.js';
 import {
   SlugTakenError, createServer, listServersForUser, publicServer,
   listServerMembers, publicMember, addMember, ownerWallet,
 } from '../../servers/service.js';
 import { fetchOnchainBalance, withdrawFromServerWallet } from '../../servers/wallet.js';
+import { verifyAgentInvitePayment, PaymentVerificationError } from '../../servers/payments.js';
+import { log } from '../../util/logger.js';
 
 const SLUG_RE = /^[a-z0-9_-]{1,32}$/;
 
@@ -200,6 +202,99 @@ export function serverRoutes(deps: ServerRouteDeps) {
       if (code === 'insufficient_balance') return c.json({ error: code, message: e.message }, 400);
       throw e;
     }
+  });
+
+  const InviteAgentBody = z.object({
+    agentSlug: z.string().min(1).max(64),
+    paymentTxHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional(),
+  });
+
+  app.post('/v1/servers/:sid/invite-agent', requireAuth, requireServerMember(deps.db, 'admin'), async (c) => {
+    const parsed = InviteAgentBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
+
+    const { agentSlug, paymentTxHash } = parsed.data;
+
+    // 1. Look up the agent by slug
+    const agent = await deps.db.collection<AgentDoc>(collections.agents).findOne(
+      { slug: agentSlug.toLowerCase() },
+      { collation: { locale: 'en', strength: 2 } },
+    );
+    if (!agent) return c.json({ error: 'not_found' }, 404);
+
+    // 2. Check if agent is already a member
+    const dup = await deps.db.collection(collections.serverMembers).findOne({
+      serverId: c.get('server')._id,
+      principalType: 'agent',
+      principalId: agent._id,
+    });
+    if (dup) return c.json({ error: 'agent_already_in_server' }, 409);
+
+    // 3. Handle paid invites
+    const priceOg = agent.priceOg ?? '0';
+    const isPaid = parseFloat(priceOg) > 0;
+
+    if (isPaid) {
+      // Require a txHash
+      if (!paymentTxHash) return c.json({ error: 'payment_required', priceOg }, 402);
+
+      // Require an ownerWallet
+      if (!agent.ownerWallet) return c.json({ error: 'agent_has_no_owner_wallet' }, 400);
+
+      // Require the authenticated user to have a wallet (for the from-check).
+      const buyer = c.get('user');
+      if (!buyer.walletAddress) return c.json({ error: 'user_has_no_wallet' }, 400);
+
+      // Verify the payment on-chain. The from-check rejects replays of any
+      // historical transfer to ownerWallet that the buyer didn't actually send.
+      try {
+        await verifyAgentInvitePayment({
+          txHash: paymentTxHash,
+          expectedFrom: buyer.walletAddress,
+          toAddress: agent.ownerWallet,
+          expectedOgAmount: priceOg,
+        });
+      } catch (e) {
+        if (e instanceof PaymentVerificationError) {
+          log.warn({ txHash: paymentTxHash, code: e.code, agentSlug }, 'agent invite payment verification failed');
+          // Map insufficient_confirmations to 425 (Too Early) so the frontend
+          // can retry after a short backoff instead of treating it as fatal.
+          if (e.code === 'insufficient_confirmations') {
+            return c.json({ error: 'insufficient_confirmations', message: e.message }, 425);
+          }
+          return c.json({ error: 'payment_invalid', code: e.code, message: e.message }, 400);
+        }
+        throw e;
+      }
+    }
+
+    // 4. Add the agent as a member. The uniqueness on serverMembers.paidTxHash
+    // (sparse) is the authoritative replay guard — it eliminates the
+    // TOCTOU window a pre-check would have. On collision Mongo raises
+    // 11000; we translate to 409 payment_already_used.
+    let member;
+    try {
+      member = await addMember(deps.db, {
+        serverId: c.get('server')._id,
+        principalType: 'agent',
+        principalId: agent._id,
+        role: 'member',
+        alias: null,
+        ...(isPaid && paymentTxHash ? {
+          paidTxHash: paymentTxHash,
+          paidAmount: priceOg,
+          paidByUserId: c.get('user')._id,
+        } : {}),
+      });
+    } catch (e) {
+      const err = e as { code?: number; keyPattern?: Record<string, unknown> };
+      if (err.code === 11000 && err.keyPattern && 'paidTxHash' in err.keyPattern) {
+        return c.json({ error: 'payment_already_used' }, 409);
+      }
+      throw e;
+    }
+
+    return c.json({ member: publicMember(member) }, 201);
   });
 
   app.delete('/v1/servers/:sid/members/:mid', requireAuth, requireServerMember(deps.db), async (c) => {

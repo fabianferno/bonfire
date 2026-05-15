@@ -50,6 +50,8 @@ interface FormFields {
   agents: string;
   llmTemperature: string;
   llmMaxTokens: string;
+  /** Invite price in OG, decimal string. "0" = free. */
+  priceOg: string;
 }
 
 interface FieldErrors {
@@ -263,6 +265,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     agents: '',
     llmTemperature: '0.7',
     llmMaxTokens: '1024',
+    priceOg: '0',
   });
   const [selectedSkills, setSelectedSkills] = useState<DiscoveredSkill[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerDraft[]>([]);
@@ -395,6 +398,11 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
       const llmTemp = parseFloat(fields.llmTemperature);
       const llmMax = parseInt(fields.llmMaxTokens, 10);
 
+      // Normalise price input — "" becomes "0"; otherwise we trust the regex
+      // the backend enforces (^\d+(\.\d+)?$).
+      const priceInput = fields.priceOg.trim();
+      const priceOg = priceInput.length === 0 ? '0' : priceInput;
+
       const prepareBody = {
         slug: fields.slug,
         name: fields.name.trim(),
@@ -408,6 +416,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           temperature: Number.isFinite(llmTemp) ? llmTemp : 0.7,
           maxTokens: Number.isFinite(llmMax) ? llmMax : 1024,
         },
+        priceOg,
       };
 
       // POST /v1/agents/mint — backend encrypts, uploads to 0G Storage, returns
@@ -971,6 +980,25 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
                 step={64}
                 placeholder="1024"
               />
+            </div>
+
+            {/* Invite price (OG) */}
+            <div>
+              <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
+                Invite price (OG)
+              </ModalLabel>
+              <ModalInput
+                type="number"
+                value={fields.priceOg}
+                onChange={set('priceOg')}
+                min={0}
+                step={0.01}
+                placeholder="0"
+              />
+              <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+                What inviters pay (in OG) to add this agent to their server.
+                Fees flow to your wallet. <strong>0</strong> = free invite.
+              </p>
             </div>
           </div>
         </div>

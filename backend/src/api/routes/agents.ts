@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
 import { randomBytes as nodeRandomBytes } from 'node:crypto';
-import { keccak256 } from 'ethers';
+import { keccak256, parseEther, formatEther } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { requireUser, type AuthBindings } from '../../auth/middleware.js';
 import {
@@ -52,6 +52,7 @@ const PatchAgentBody = z.object({
   agents: z.string().max(10_000).optional(),
   env: z.record(z.string(), z.string()).optional(),
   llm: TenantLlmOverrideSchema.optional(),
+  priceOg: z.string().regex(/^\d+(\.\d+)?$/).optional(),
 });
 
 export interface AgentRouteDeps { db: Db; jwtSecret: string; }
@@ -73,6 +74,48 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
     return c.json({ agent: publicAgent(a) });
+  });
+
+  /**
+   * GET /v1/agents/:aid/earnings
+   *
+   * Returns the agent's lifetime invite earnings — every paid `serverMember`
+   * row whose `principalId === agent._id` contributes one event. The amount
+   * is the per-server invite price the buyer paid (decimal OG string).
+   *
+   * Public: anyone can see what an agent has earned (marketplace transparency).
+   */
+  app.get('/v1/agents/:aid/earnings', async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+
+    const rows = await deps.db.collection(collections.serverMembers)
+      .find({ principalType: 'agent', principalId: a._id, paidAmount: { $exists: true } })
+      .sort({ joinedAt: -1 })
+      .toArray();
+
+    let totalWei = 0n;
+    const events = rows.map((r) => {
+      let amountWei = 0n;
+      try { amountWei = parseEther(String(r.paidAmount ?? '0')); } catch { /* ignore */ }
+      totalWei += amountWei;
+      return {
+        serverId: r.serverId.toHexString(),
+        amount: String(r.paidAmount ?? '0'),
+        txHash: r.paidTxHash ?? null,
+        paidByUserId: r.paidByUserId?.toHexString?.() ?? null,
+        joinedAt: r.joinedAt instanceof Date ? r.joinedAt.toISOString() : new Date(r.joinedAt).toISOString(),
+      };
+    });
+
+    return c.json({
+      agentSlug: a.slug,
+      ownerWallet: a.ownerWallet ?? null,
+      priceOg: a.priceOg ?? '0',
+      totalEarnedOg: formatEther(totalWei),
+      paidInviteCount: rows.length,
+      events,
+    });
   });
 
   app.post('/v1/agents', requireAuth, async (c) => {
@@ -168,6 +211,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
     if (parsed.data.avatarUrl !== undefined) $set.avatarUrl = parsed.data.avatarUrl;
     if (parsed.data.tags !== undefined) $set.tags = parsed.data.tags;
     if (parsed.data.baseUrl !== undefined) $set.baseUrl = parsed.data.baseUrl;
+    if (parsed.data.priceOg !== undefined) $set.priceOg = parsed.data.priceOg;
     const updated = await deps.db.collection(collections.agents).findOneAndUpdate(
       { _id: a._id }, { $set }, { returnDocument: 'after' }
     );
@@ -377,6 +421,12 @@ export function agentRoutes(deps: AgentRouteDeps) {
       temperature: z.number().min(0).max(1).optional(),
       maxTokens: z.number().min(1).max(32000).optional(),
     }).default({}),
+    /**
+     * Invite price in OG (decimal string, e.g. "0", "0.5"). Stored on the
+     * AgentDoc and used by POST /v1/servers/:sid/invite-agent to charge
+     * inviters and route payment to ownerWallet. Defaults to "0" (free).
+     */
+    priceOg: z.string().regex(/^\d+(\.\d+)?$/).optional(),
   });
 
   /** Zod schema for POST /v1/agents/mint/confirm */
@@ -399,7 +449,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const parsed = MintRequestSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
 
-    const { slug, name, description, avatarUrl, tags, soul, agents: agentsText, llm } =
+    const { slug, name, description, avatarUrl, tags, soul, agents: agentsText, llm, priceOg } =
       parsed.data;
     const user = c.get('user');
 
@@ -455,7 +505,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
     // 10. Insert MintReservationDoc — `manifest` caches public fields so /confirm can
     // build the AgentDoc without re-fetching from 0G Storage.
     const now = new Date();
-    const reservation: MintReservationDoc & { manifest: typeof publicManifest } = {
+    const reservation: MintReservationDoc & { manifest: typeof publicManifest; priceOg?: string } = {
       _id: new ObjectId(),
       reservedId,
       userId: user._id,
@@ -468,6 +518,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
       createdAt: now,
       expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // +24h
       manifest: publicManifest,
+      priceOg,  // optional; persisted onto the AgentDoc at /confirm
     };
 
     try {
@@ -552,6 +603,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
 
     // 5. Build and insert AgentDoc
     const m = reservation.manifest as { name?: string; description?: string; avatarUrl?: string | null; tags?: string[] } | undefined;
+    const reservedPrice = (reservation as MintReservationDoc & { priceOg?: string }).priceOg;
     const now = new Date();
     const agentDoc: AgentDoc = {
       _id: new ObjectId(),
@@ -575,15 +627,30 @@ export function agentRoutes(deps: AgentRouteDeps) {
       bundleUri: reservation.bundleUri,
       sealedDEKBaseUri: reservation.sealedDEKBaseUri,
       bundleHash: reservation.bundleHash,
+      // Pricing — chosen by the creator at mint time. "0" or absent = free invite.
+      priceOg: reservedPrice ?? '0',
     };
 
     // Idempotent upsert by tokenId — the chain indexer may have inserted this
-    // AgentDoc first if /confirm races with the AgentMinted event. Either path
-    // produces the same final document; whichever arrives first wins.
+    // AgentDoc first if /confirm races with the AgentMinted event.
+    //
+    // priceOg lives off-chain (in the reservation), so the indexer's path
+    // can't know it. We `$setOnInsert` chain-derived + immutable fields, but
+    // ALWAYS `$set` the price + reservation-only fields so the indexer's
+    // null-price placeholder gets overwritten on confirm.
     try {
+      // updatedAt and priceOg appear in $set so the indexer's prior insert
+      // gets these fields refreshed; everything else is insert-only via
+      // $setOnInsert. Mongo errors if the same path appears in both, so we
+      // strip them from the immutable shape before the upsert.
+      const { priceOg: confirmedPrice, updatedAt: _omitUpdatedAt, ...immutable } = agentDoc;
+      void _omitUpdatedAt;
       await deps.db.collection<AgentDoc>(collections.agents).updateOne(
         { tokenId: agentDoc.tokenId },
-        { $setOnInsert: agentDoc },
+        {
+          $setOnInsert: immutable,
+          $set: { priceOg: confirmedPrice, updatedAt: new Date() },
+        },
         { upsert: true },
       );
     } catch (e: unknown) {

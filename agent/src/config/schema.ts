@@ -64,6 +64,7 @@ export const BuiltinToolsSchema = z.object({
   webFetch: z.object({ enabled: z.boolean().default(true) }).default(() => ({}) as any),
   codeExec: z.object({ enabled: z.boolean().default(false), timeoutMs: z.number().default(5000) }).default(() => ({}) as any),
   fileOps: z.object({ enabled: z.boolean().default(false), rootDir: z.string().default('./workspace') }).default(() => ({}) as any),
+  publishSite: z.object({ enabled: z.boolean().default(true) }).default(() => ({}) as any),
 });
 
 export const ToolsSchema = z.object({ builtin: BuiltinToolsSchema.default(() => ({}) as any) }).default(() => ({}) as any);

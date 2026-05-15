@@ -23,6 +23,8 @@ export interface UseVoiceCall {
   participants: VoiceParticipantInfo[];
   micMuted: boolean;
   toggleMic(): void;
+  deafened: boolean;
+  toggleDeafen(): void;
   leave(): Promise<void>;
   error: string | null;
 }
@@ -39,6 +41,7 @@ export function useVoiceCall(opts: {
 
   const [joinState, setJoinState] = useState<UseVoiceCall["joinState"]>("idle");
   const [micMuted, setMicMuted] = useState(false);
+  const [deafened, setDeafened] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Track audio levels per session id
   const [audioLevels, setAudioLevels] = useState<Record<string, number>>({});
@@ -62,7 +65,14 @@ export function useVoiceCall(opts: {
     queueMicrotask(() => setJoinState("joining"));
 
     callObject
-      .join({ url: opts.roomUrl, token: opts.token })
+      .join({
+        url: opts.roomUrl,
+        token: opts.token,
+        // Audio-only — never request the camera; never publish video.
+        videoSource: false,
+        audioSource: true,
+        subscribeToTracksAutomatically: true,
+      })
       .catch((err: unknown) => {
         if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
         setJoinState("error");
@@ -120,7 +130,46 @@ export function useVoiceCall(opts: {
     const next = !micMuted;
     callObject.setLocalAudio(!next);
     setMicMuted(next);
+    // Un-deafening implicitly unmutes the mic; deafening also mutes the mic
+    // (standard Discord behavior — you can't deafen and still talk).
   }, [callObject, micMuted]);
+
+  // ── Deafen toggle (mute incoming audio + force mic mute) ──────────────────
+  const toggleDeafen = useCallback(() => {
+    if (!callObject) return;
+    const next = !deafened;
+    setDeafened(next);
+    if (next) {
+      // Going deaf → mute mic too (Discord convention)
+      if (!micMuted) {
+        callObject.setLocalAudio(false);
+        setMicMuted(true);
+      }
+      // Unsubscribe from every remote participant's audio track.
+      try {
+        const remoteUpdates: Record<string, { setSubscribedTracks: { audio: boolean } }> = {};
+        for (const id of participantIds) {
+          remoteUpdates[id] = { setSubscribedTracks: { audio: false } };
+        }
+        if (Object.keys(remoteUpdates).length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (callObject as any).updateParticipants(remoteUpdates);
+        }
+      } catch { /* daily-js shape variance — best effort */ }
+    } else {
+      // Re-subscribe to remote audio. Mic stays whatever the user explicitly set.
+      try {
+        const remoteUpdates: Record<string, { setSubscribedTracks: { audio: boolean } }> = {};
+        for (const id of participantIds) {
+          remoteUpdates[id] = { setSubscribedTracks: { audio: true } };
+        }
+        if (Object.keys(remoteUpdates).length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (callObject as any).updateParticipants(remoteUpdates);
+        }
+      } catch { /* best effort */ }
+    }
+  }, [callObject, deafened, micMuted, participantIds]);
 
   // ── Leave ─────────────────────────────────────────────────────────────────
   const leave = useCallback(async () => {
@@ -139,6 +188,8 @@ export function useVoiceCall(opts: {
     participants: ParticipantList,
     micMuted,
     toggleMic,
+    deafened,
+    toggleDeafen,
     leave,
     error,
   };

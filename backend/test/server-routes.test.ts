@@ -21,8 +21,8 @@ describe('server routes', () => {
 
     const channels = await jsonReq(app, 'GET', `/v1/servers/${r.body.server.id}/channels`, undefined, me.token);
     expect(channels.status).toBe(200);
-    expect(channels.body.channels.length).toBe(1);
-    expect(channels.body.channels[0].name).toBe('general');
+    expect(channels.body.channels.length).toBe(3);
+    expect(channels.body.channels.find((c: any) => c.name === 'general')).toBeDefined();
 
     const members = await jsonReq(app, 'GET', `/v1/servers/${r.body.server.id}/members`, undefined, me.token);
     expect(members.body.members.length).toBe(1);

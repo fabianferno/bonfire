@@ -241,6 +241,8 @@ export class ChainIndexer {
         avatarUrl?: string | null;
         tags?: string[];
       };
+      /** Off-chain price chosen at mint time; persisted on the reservation. */
+      priceOg?: string;
     };
 
     const insertion: Partial<AgentDoc> = {
@@ -263,6 +265,9 @@ export class ChainIndexer {
       createdBy: reservation.userId,
       createdAt: new Date(),
       updatedAt: new Date(),
+      // Pull the creator-chosen price from the reservation so it survives the
+      // /confirm vs. indexer race. Falls back to "0" (free) if unset.
+      priceOg: res.priceOg ?? '0',
     };
 
     await this.deps.db

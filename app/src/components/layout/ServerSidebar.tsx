@@ -35,8 +35,12 @@ export default function ServerSidebar() {
 
   if (!activeServer) return null;
 
+  const isOwner = activeServer.ownerId === user.id;
+
   const textChannels  = activeServer.channels.filter(c => c.type === "text");
   const voiceChannels = activeServer.channels.filter(c => c.type === "voice");
+  // Audit channels are visible only to the server owner.
+  const auditChannels = isOwner ? activeServer.channels.filter(c => c.type === "audit") : [];
 
   const handleCreateCh = () => {
     if (!chName.trim()) return;
@@ -118,7 +122,6 @@ export default function ServerSidebar() {
           <ChannelCategory label="Voice Channels" onAdd={() => { setNewChType("voice"); setShowChannelModal(true); }} />
           {voiceChannels.map(ch => {
             const isJoined = voice.joinedChannelId === ch.id;
-            const inChannel = voice.participants.filter(p => true); // all participants in this room
             return (
               <div key={ch.id}>
                 <VoiceChannelRow
@@ -148,6 +151,21 @@ export default function ServerSidebar() {
               </div>
             );
           })}
+
+          {/* Audit channels — owner only */}
+          {auditChannels.length > 0 && (
+            <>
+              <ChannelCategory label="Audit" onAdd={() => {}} />
+              {auditChannels.map(ch => (
+                <AuditChannelRow
+                  key={ch.id}
+                  name={ch.name}
+                  active={ch.id === activeChannelId}
+                  onClick={() => setActiveChannel(ch.id)}
+                />
+              ))}
+            </>
+          )}
         </div>
 
         {/* Voice Connected bar — like Discord's bottom-left green bar */}
@@ -340,7 +358,22 @@ function VoiceIconBtn({ children, title, active, onClick }: { children: React.Re
   );
 }
 
-// ── Audit row ─────────────────────────────────────────────────────────────────
+// ── Audit channel row (sidebar) ───────────────────────────────────────────────
+
+function AuditChannelRow({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left text-sm transition-colors"
+      style={{ background: active ? "var(--bf-quinary)" : "transparent", color: active ? "white" : "var(--bf-senary)" }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+      <ShieldAlert size={18} style={{ color: active ? "var(--bf-fire)" : "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={1.5} />
+      <span className="truncate flex-1">{name}</span>
+    </button>
+  );
+}
+
+// ── Audit entry row (modal) ───────────────────────────────────────────────────
 
 function AuditRow({ entry }: { entry: AuditEntry }) {
   const [expanded, setExpanded] = useState(false);

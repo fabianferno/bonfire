@@ -22,7 +22,7 @@ export interface BackendChannel {
   serverId: string;
   name: string;
   topic: string | null;
-  type: 'text';
+  type: 'text' | 'voice' | 'audit';
   defaultAgentId: string | null;
   position: number;
   cascadeEnabled: boolean;
@@ -56,6 +56,10 @@ export interface BackendAgent {
   baseUrl: string;
   createdBy: string;
   createdAt: string;
+  /** Invite price in OG (decimal string). "0" or missing means free. */
+  priceOg?: string;
+  /** On-chain owner wallet address; required for paid invites. */
+  ownerWallet?: string | null;
 }
 
 export interface BackendMember {

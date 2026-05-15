@@ -34,9 +34,12 @@ export const bf = {
 
   createChannel: (
     sid: string,
-    body: { name: string; topic?: string; defaultAgentId?: string },
+    body: { name: string; type?: 'text' | 'voice'; topic?: string; defaultAgentId?: string },
   ) =>
     api<{ channel: BackendChannel }>('POST', `/v1/servers/${sid}/channels`, body),
+
+  inviteAgentToServer: (serverId: string, body: { agentSlug: string; paymentTxHash?: string }) =>
+    api<{ member: BackendMember }>('POST', `/v1/servers/${serverId}/invite-agent`, body),
 
   patchChannel: (
     cid: string,
@@ -91,6 +94,26 @@ export const bf = {
 
   getAgent: (aidOrSlug: string) =>
     api<{ agent: BackendAgent }>('GET', `/v1/agents/${aidOrSlug}`),
+
+  /**
+   * Lifetime invite earnings for an agent — sum of every paid serverMember row.
+   * Public (no auth).
+   */
+  getAgentEarnings: (aidOrSlug: string) =>
+    api<{
+      agentSlug: string;
+      ownerWallet: string | null;
+      priceOg: string;
+      totalEarnedOg: string;
+      paidInviteCount: number;
+      events: Array<{
+        serverId: string;
+        amount: string;
+        txHash: string | null;
+        paidByUserId: string | null;
+        joinedAt: string;
+      }>;
+    }>('GET', `/v1/agents/${aidOrSlug}/earnings`, undefined, { auth: false }),
 
   createAgent: (body: {
     name: string;
@@ -151,6 +174,27 @@ export const bf = {
 
   removeMcpServer: (aid: string, id: string) =>
     api<{ ok: boolean }>('DELETE', `/v1/agents/${aid}/mcp/servers/${encodeURIComponent(id)}`),
+
+  patchAgent: (aidOrSlug: string, body: Partial<{
+    name: string;
+    description: string;
+    bio: string | null;
+    avatarUrl: string | null;
+    tags: string[];
+    baseUrl: string;
+    priceOg: string;
+  }>) => api<{ agent: BackendAgent }>('PATCH', `/v1/agents/${aidOrSlug}`, body),
+
+  getAuditLog: (cid: string, opts: { limit?: number; before?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.limit) params.set('limit', String(opts.limit));
+    if (opts.before) params.set('before', opts.before);
+    const qs = params.toString();
+    return api<{ entries: AuditLogEntry[] }>(
+      'GET',
+      `/v1/channels/${cid}/audit${qs ? '?' + qs : ''}`,
+    );
+  },
 };
 
 export interface InstalledSkill {
@@ -175,4 +219,13 @@ export interface McpServerConfig {
   args: string[];
   env: Record<string, string>;
   enabled: boolean;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  actorType: 'user' | 'agent' | 'system';
+  agentSlug?: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }

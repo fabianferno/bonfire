@@ -30,6 +30,8 @@ export interface AgentDoc {
   createdBy: ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  /** Invite price in OG (decimal string, e.g. "0.5"). Missing/undefined means free. */
+  priceOg?: string;
   // INFT fields — optional during migration (legacy agents won't have these)
   tokenId?: string;               // bigint serialized as string (Mongo can't hold full uint256)
   contractAddress?: string;       // 0x...
@@ -96,6 +98,10 @@ export interface ServerMemberDoc {
   role: MemberRole;
   alias: string | null;
   joinedAt: Date;
+  /** Set when the invite was paid via an OG transaction. */
+  paidTxHash?: string;
+  paidAmount?: string;
+  paidByUserId?: ObjectId;
 }
 
 export interface ChannelDoc {
@@ -103,7 +109,7 @@ export interface ChannelDoc {
   serverId: ObjectId;
   name: string;
   topic: string | null;
-  type: 'text' | 'voice';
+  type: 'text' | 'voice' | 'audit';
   defaultAgentId: ObjectId | null;
   position: number;
   cascadeEnabled?: boolean;
@@ -147,6 +153,21 @@ export interface MessageDoc {
   editedAt: Date | null;
 }
 
+export type AuditActorType = 'user' | 'agent' | 'system';
+
+export interface AuditLogDoc {
+  _id: ObjectId;
+  serverId: ObjectId;
+  channelId: ObjectId;
+  actorType: AuditActorType;
+  actorId: ObjectId | null;
+  agentId: ObjectId | null;
+  agentSlug: string | null;
+  action: string;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+}
+
 export const collections = {
   users: 'users',
   agents: 'agents',
@@ -156,4 +177,5 @@ export const collections = {
   messages: 'messages',
   mintReservations: 'mintReservations',
   voiceSessions: 'voiceSessions',
+  auditLog: 'auditLog',
 } as const;

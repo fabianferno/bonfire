@@ -54,7 +54,6 @@ export interface BackendAgent {
   bio: string | null;
   tags: string[];
   baseUrl: string;
-  visibility: 'public' | 'unlisted';
   createdBy: string;
   createdAt: string;
 }

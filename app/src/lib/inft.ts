@@ -26,7 +26,7 @@ export interface MintPayload {
   sealedDEKBaseUri: string;
   /** 0x-prefixed 32-byte hex string as returned by the backend /v1/agents/mint endpoint. */
   bundleHash: `0x${string}`;
-  /** 0 = public, 1 = permissioned. */
+  /** Always `0` from our mint API (legacy ABI arg). */
   mode: 0 | 1;
 }
 

@@ -105,7 +105,6 @@ function validMintBody(overrides: Record<string, unknown> = {}) {
     soul: 'You are a helpful test assistant.',
     agents: '# AGENTS\nBe concise.',
     llm: {},
-    mode: 'public',
     ...overrides,
   };
 }
@@ -176,7 +175,7 @@ describe('mint endpoints', () => {
     expect(mintPayload).toHaveProperty('bundleUri');
     expect(mintPayload).toHaveProperty('sealedDEKBaseUri');
     expect(mintPayload).toHaveProperty('bundleHash');
-    expect(mintPayload.mode).toBe(0); // 'public' → 0
+    expect(mintPayload.mode).toBe(0); // mint API always requests public-only on-chain mode
 
     // reservationId must be a UUID
     expect(reservationId).toMatch(
@@ -201,22 +200,6 @@ describe('mint endpoints', () => {
     expect(doc!.status).toBe('uploaded');
     expect(doc!.slug).toBe('test-agent');
     expect(doc!.bundleHash).toBe(mintPayload.bundleHash);
-  });
-
-  // -------------------------------------------------------------------------
-  // POST /v1/agents/mint — permissioned mode
-  // -------------------------------------------------------------------------
-
-  it('mode=permissioned: returns mintPayload.mode === 1', async () => {
-    const r = await jsonReq(
-      app,
-      'POST',
-      '/v1/agents/mint',
-      validMintBody({ slug: 'perm-agent', mode: 'permissioned' }),
-      MINTER_TOKEN,
-    );
-    expect(r.status).toBe(200);
-    expect(r.body.mintPayload.mode).toBe(1);
   });
 
   // -------------------------------------------------------------------------
@@ -248,7 +231,6 @@ describe('mint endpoints', () => {
       bundleUri: 'mock://y',
       sealedDEKBaseUri: 'mock://z',
       bundleHash: '0x' + '00'.repeat(32),
-      mode: 'public',
       status: 'uploaded',
       createdAt: now,
       expiresAt: new Date(now.getTime() + 60_000), // still valid
@@ -340,7 +322,7 @@ describe('mint endpoints', () => {
     expect(agentDoc).not.toBeNull();
     expect(agentDoc!.tokenId).toBe('42');
     expect(agentDoc!.ownerWallet?.toLowerCase()).toBe(MINTER_WALLET.toLowerCase());
-    expect(agentDoc!.mode).toBe('public');
+    expect(agentDoc!.visibility).toBe('public');
 
     // Verify reservation is marked minted
     const reservation = await tdb.db
@@ -430,7 +412,6 @@ describe('mint endpoints', () => {
       bundleUri: 'mock://b',
       sealedDEKBaseUri: 'mock://c',
       bundleHash: '0x' + '00'.repeat(32),
-      mode: 'public',
       status: 'uploaded',
       createdAt: pastDate,
       expiresAt: pastDate, // already expired
@@ -466,7 +447,6 @@ describe('mint endpoints', () => {
       bundleUri: 'mock://b',
       sealedDEKBaseUri: 'mock://c',
       bundleHash: '0x' + '00'.repeat(32),
-      mode: 'public',
       status: 'minted', // already consumed
       createdAt: now,
       expiresAt: new Date(now.getTime() + 3600_000),

@@ -53,8 +53,7 @@ export default function InviteAgentModal({
         // BackendAgent doesn't expose tokenId but the backend contract says
         // only INFT-backed agents are invitable. We show all public agents
         // and let the backend return 400 agent_not_invitable for non-INFT ones.
-        // We filter to public visibility as a best-effort client hint.
-        setAgents(result.agents.filter((a) => a.visibility === "public"));
+        setAgents(result.agents);
       } catch (err) {
         setFetchError(
           err instanceof Error ? err.message : "Failed to load agents.",
@@ -252,9 +251,9 @@ export default function InviteAgentModal({
                       className="px-4 py-1.5 rounded text-xs font-semibold flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-default"
                       style={{
                         background: isSuccess
-                          ? "var(--bf-green, #22c55e)"
+                          ? "var(--bf-accent)"
                           : "var(--bf-fire, var(--bf-accent))",
-                        color: "var(--bf-white)",
+                        color: isSuccess ? "black" : "var(--bf-white)",
                         minWidth: 72,
                       }}
                     >

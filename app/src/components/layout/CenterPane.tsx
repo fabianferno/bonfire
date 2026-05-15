@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
@@ -8,19 +9,17 @@ import MessageComposer from "@/components/message/MessageComposer";
 import Avatar from "@/components/shared/Avatar";
 
 export default function CenterPane() {
-  const { activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
+  const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
   const voice = useVoiceCtx();
 
-  if (!activeServer || !activeChannel) {
-    return (
-      <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bf-primary)" }}>
-        <div className="text-center" style={{ color: "var(--bf-gray)" }}>
-          <div className="text-5xl mb-3">🔥</div>
-          <p className="font-bold text-white text-xl">Select a channel to start</p>
-          <p className="text-sm mt-1">Pick a text channel from the sidebar.</p>
-        </div>
-      </div>
-    );
+  if (!activeServer) {
+    return servers.length === 0
+      ? <NoServersHero />
+      : <NoServerSelectedHero />;
+  }
+
+  if (!activeChannel) {
+    return <NoChannelSelected serverName={activeServer.name} />;
   }
 
   const isVoice = activeChannel.type === "voice";
@@ -88,6 +87,236 @@ export default function CenterPane() {
         </>
       )}
     </main>
+  );
+}
+
+// ── Empty states ──────────────────────────────────────────────────────────────
+
+// Claude-style cool fallback names when the user hasn't told us what to call them.
+const COOL_FALLBACKS = [
+  "friend", "explorer", "wanderer", "trailblazer", "stargazer",
+  "kindred spirit", "fellow traveler", "curious one", "night owl", "firekeeper",
+];
+
+function isPrivyDid(s: string | undefined): boolean {
+  return !!s && s.startsWith("did:");
+}
+
+function resolveGreetingName(preferred: string, username: string): string {
+  if (preferred.trim()) return preferred.trim();
+  if (username && !isPrivyDid(username) && username !== "You") return username;
+  // Stable per-session pick so the name doesn't flicker on re-render
+  const idx = Math.floor((typeof window !== "undefined" ? performance.timeOrigin : 0) % COOL_FALLBACKS.length);
+  return COOL_FALLBACKS[idx] ?? "friend";
+}
+
+function NoServersHero() {
+  const router = useRouter();
+  const { user, preferredName, setPreferredName } = useApp();
+  const openCreate = () => window.dispatchEvent(new Event("bonfire:open-create-server"));
+
+  const displayName = resolveGreetingName(preferredName, user.username);
+  const usingFallback = !preferredName.trim() && (isPrivyDid(user.username) || user.username === "You");
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(preferredName);
+
+  const saveName = () => {
+    setPreferredName(draft);
+    setEditing(false);
+  };
+  const cancelEdit = () => {
+    setDraft(preferredName);
+    setEditing(false);
+  };
+
+  const features = [
+    {
+      Icon: Sparkles,
+      title: "Mint an iNFT agent",
+      body: "Spin up a soul-bound AI agent on 0G. Voice, memory, and skills baked in.",
+      color: "var(--bf-fire)",
+    },
+    {
+      Icon: MessageSquare,
+      title: "Chat & voice channels",
+      body: "Talk to your agents in text or jump into a Daily-powered voice room.",
+      color: "var(--bf-accent)",
+    },
+    {
+      Icon: ShieldCheck,
+      title: "TEE-verified actions",
+      body: "Every agent call is logged with an on-chain attestation in the audit log.",
+      color: "var(--bf-fire)",
+    },
+  ];
+
+  return (
+    <div className="flex-1 overflow-y-auto" style={{ background: "var(--bf-primary)" }}>
+      <div className="max-w-3xl mx-auto px-8 py-16 flex flex-col items-center text-center">
+        <div className="text-6xl mb-4">🔥</div>
+
+        {editing ? (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-3xl font-bold text-white">Hey,</span>
+            <input
+              autoFocus
+              value={draft}
+              maxLength={40}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") saveName();
+                if (e.key === "Escape") cancelEdit();
+              }}
+              placeholder="what should we call you?"
+              className="text-3xl font-bold bg-transparent border-b-2 outline-none text-white placeholder:text-gray-600 min-w-0"
+              style={{ borderColor: "var(--bf-accent)", width: "auto", minWidth: 240 }}
+            />
+            <button
+              onClick={saveName}
+              title="Save"
+              className="w-9 h-9 flex items-center justify-center rounded-lg transition-opacity hover:opacity-90"
+              style={{ background: "var(--bf-accent)", color: "black" }}
+            >
+              <Check size={18} strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={cancelEdit}
+              title="Cancel"
+              className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors"
+              style={{ background: "var(--bf-quaternary)", color: "var(--bf-gray)", border: "1px solid var(--bf-quinary)" }}
+            >
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+        ) : (
+          <h1 className="flex items-center gap-3 text-3xl font-bold text-white mb-2">
+            <span>
+              Hey, <span style={{ color: usingFallback ? "var(--bf-gray)" : "white", fontStyle: usingFallback ? "italic" : "normal", marginRight: usingFallback ? "0.15em" : 0 }}>{displayName}</span>!
+            </span>
+            <button
+              onClick={() => { setDraft(preferredName); setEditing(true); }}
+              title="What should agents call you?"
+              className="ml-2 w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:text-white"
+              style={{ color: "var(--bf-gray)", background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}
+            >
+              <Pencil size={14} strokeWidth={2} />
+            </button>
+          </h1>
+        )}
+
+        <p className="text-base max-w-lg" style={{ color: "var(--bf-gray)" }}>
+          Servers are your private workspaces where humans and on-chain agents collaborate.
+          Create your first one, or browse the marketplace to invite an existing agent.
+          {usingFallback && !editing && (
+            <>
+              {" "}
+              <button
+                onClick={() => { setDraft(""); setEditing(true); }}
+                className="underline hover:text-white transition-colors"
+                style={{ color: "var(--bf-accent)" }}
+              >
+                Tell us what to call you →
+              </button>
+            </>
+          )}
+        </p>
+
+        <div className="flex flex-wrap gap-3 justify-center mt-8">
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-black transition-opacity hover:opacity-90"
+            style={{ background: "var(--bf-accent)" }}
+          >
+            <Plus size={18} strokeWidth={2.5} />
+            Create your first server
+          </button>
+          <button
+            onClick={() => router.push("/marketplace")}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold transition-colors"
+            style={{ background: "var(--bf-quaternary)", color: "white", border: "1px solid var(--bf-quinary)" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--bf-quaternary)"; }}
+          >
+            <Compass size={18} strokeWidth={2} />
+            Browse the marketplace
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-12 w-full">
+          {features.map(({ Icon, title, body, color }) => (
+            <div
+              key={title}
+              className="p-5 rounded-2xl text-left"
+              style={{ background: "var(--bf-secondary)", border: "1px solid var(--bf-quinary)" }}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center mb-3"
+                style={{ background: "var(--bf-quaternary)", color }}
+              >
+                <Icon size={18} strokeWidth={2} />
+              </div>
+              <p className="text-white font-bold text-sm mb-1">{title}</p>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--bf-gray)" }}>{body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="mt-10 px-4 py-3 rounded-xl flex items-center gap-3 text-sm"
+          style={{ background: "var(--bf-secondary)", border: "1px solid var(--bf-quinary)", color: "var(--bf-gray)" }}
+        >
+          <span style={{ color: "var(--bf-fire)" }}>💡</span>
+          <span>
+            Each new server gets its own 0G wallet for paying agent inference and gas. You&apos;ll be asked to fund it after creation.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NoServerSelectedHero() {
+  const router = useRouter();
+  return (
+    <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bf-primary)" }}>
+      <div className="text-center max-w-md px-8">
+        <ArrowLeft
+          size={28}
+          className="mx-auto mb-4 animate-pulse"
+          style={{ color: "var(--bf-gray)" }}
+          strokeWidth={1.5}
+        />
+        <p className="font-bold text-white text-xl mb-2">Pick a server</p>
+        <p className="text-sm" style={{ color: "var(--bf-gray)" }}>
+          Choose a server from the left to see its channels, agents, and wallet.
+        </p>
+        <button
+          onClick={() => router.push("/marketplace")}
+          className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+          style={{ background: "var(--bf-quaternary)", color: "white", border: "1px solid var(--bf-quinary)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--bf-quaternary)"; }}
+        >
+          <Compass size={15} />
+          Browse marketplace
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function NoChannelSelected({ serverName }: { serverName: string }) {
+  return (
+    <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bf-primary)" }}>
+      <div className="text-center max-w-md px-8" style={{ color: "var(--bf-gray)" }}>
+        <Hash size={32} className="mx-auto mb-3" style={{ color: "var(--bf-symbol)" }} strokeWidth={1.5} />
+        <p className="font-bold text-white text-xl">No channel selected</p>
+        <p className="text-sm mt-1">
+          Pick a text or voice channel in <span className="text-white font-semibold">{serverName}</span> to start chatting.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -160,8 +389,8 @@ function VoiceStatusPane({
             <button
               onClick={() => voice.join(channelId, channelName)}
               disabled={voice.joining}
-              className="px-8 py-2.5 rounded-xl font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{ background: "var(--bf-green)" }}
+              className="px-8 py-2.5 rounded-xl font-bold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: "var(--bf-accent)" }}
             >
               {voice.joining ? "Joining…" : "Join Voice"}
             </button>
@@ -273,7 +502,7 @@ function VoiceStatusPane({
           <div className="flex items-center gap-1 text-xs">
             {voice.muted
               ? <MicOff size={14} style={{ color: "var(--bf-red)" }} />
-              : <Mic size={14} style={{ color: "var(--bf-green)" }} />
+              : <Mic size={14} style={{ color: "var(--bf-accent)" }} />
             }
             <span>{voice.muted ? "Muted" : "Live"}</span>
           </div>
@@ -306,9 +535,9 @@ function ParticipantTile({
     <div
       className="flex flex-col items-center gap-3 p-5 rounded-2xl transition-all"
       style={{
-        background: participant.speaking ? "rgba(87,201,138,0.12)" : "var(--bf-secondary)",
+        background: participant.speaking ? "rgba(208,255,0,0.08)" : "var(--bf-secondary)",
         border: participant.speaking
-          ? "1px solid rgba(87,201,138,0.4)"
+          ? "1px solid rgba(208,255,0,0.35)"
           : talkingTo
           ? "1px solid var(--bf-accent)"
           : "1px solid var(--bf-quinary)",
@@ -324,7 +553,7 @@ function ParticipantTile({
         {participant.speaking && (
           <span
             className="absolute -bottom-1 -right-1 rounded-full text-xs flex items-center justify-center"
-            style={{ width: 20, height: 20, background: "var(--bf-green)", fontSize: 10 }}
+            style={{ width: 20, height: 20, background: "var(--bf-accent)", fontSize: 10 }}
           >
             🔊
           </span>

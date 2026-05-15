@@ -30,8 +30,7 @@ const PLATFORM_PUB = pubkeyFromPrivkey(PLATFORM_PRIV);
 // ---------------------------------------------------------------------------
 // In-memory mock OgStorageClient
 //
-// Uses a plain Map keyed by URI so that `${sealedDEKBaseUri}/shared.bin` style
-// fetch paths work without the content-addressing indirection of the real mock.
+// Uses a plain Map keyed by URI; upload returns the key used for `storage.fetch(agent.*Uri)`.
 // ---------------------------------------------------------------------------
 function makeInMemoryStorage(): OgStorageClient & { _store: Map<string, Buffer> } {
   const store = new Map<string, Buffer>();
@@ -86,9 +85,7 @@ async function buildAndUpload(
   const sealedDEK = sealEcies(PLATFORM_PUB, dek);
 
   const bundleUri = await storage.upload('encryptedBundle/1.bin', encryptedBundle);
-  // sealedDEKBaseUri is the base path; decryptAgentBundle fetches `${base}/shared.bin`
-  const sealedDEKBaseUri = 'sealedDEK/1';
-  await storage.upload(`${sealedDEKBaseUri}/shared.bin`, sealedDEK);
+  const sealedDEKBaseUri = await storage.upload('sealedDEK/1.bin', sealedDEK);
 
   return { storage, bundleUri, sealedDEKBaseUri, bundleHash, dek, encryptedBundle };
 }
@@ -111,7 +108,6 @@ function makeAgentDoc(overrides: Partial<AgentDoc> = {}): AgentDoc {
     tokenId: '1',
     contractAddress: '0x1234',
     ownerWallet: '0xabcd',
-    mode: 'permissioned',
     ...overrides,
   } as AgentDoc;
 }

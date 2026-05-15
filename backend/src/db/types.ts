@@ -24,7 +24,8 @@ export interface AgentDoc {
   bio: string | null;
   tags: string[];
   baseUrl: string;
-  visibility: 'public' | 'unlisted';
+  /** Always public — retained on the document for backwards compatibility with older indexes. */
+  visibility: 'public';
   agentKeyHash?: string | null;
   createdBy: ObjectId;
   createdAt: Date;
@@ -33,7 +34,6 @@ export interface AgentDoc {
   tokenId?: string;               // bigint serialized as string (Mongo can't hold full uint256)
   contractAddress?: string;       // 0x...
   ownerWallet?: string;           // 0x... (denormalized from chain; refreshed on indexer events)
-  mode?: 'public' | 'permissioned';
   manifestUri?: string;
   bundleUri?: string;
   sealedDEKBaseUri?: string;
@@ -62,7 +62,6 @@ export interface MintReservationDoc {
   bundleUri: string;
   sealedDEKBaseUri: string;
   bundleHash: string;
-  mode: 'public' | 'permissioned';
   status: 'uploaded' | 'minted' | 'expired';
   createdAt: Date;
   expiresAt: Date;                // TTL anchor — Mongo TTL index drops expired rows

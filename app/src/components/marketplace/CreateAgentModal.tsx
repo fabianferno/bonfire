@@ -41,14 +41,11 @@ interface FormFields {
   description: string;
   avatarUrl: string;
   tags: string;
-  visibility: 'public' | 'unlisted';
   soul: string;
   agents: string;
-  llmProvider: 'openai-compatible' | 'zerog';
   llmModel: string;
   llmTemperature: string;
   llmMaxTokens: string;
-  mode: 0 | 1;
 }
 
 interface FieldErrors {
@@ -112,14 +109,11 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     description: '',
     avatarUrl: '',
     tags: '',
-    visibility: 'public',
     soul: '',
     agents: '',
-    llmProvider: 'openai-compatible',
     llmModel: '',
     llmTemperature: '0.7',
     llmMaxTokens: '1024',
-    mode: 0,
   });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -176,17 +170,14 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         description: fields.description.trim(),
         avatarUrl: fields.avatarUrl.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
-        visibility: fields.visibility,
         soul: fields.soul.trim(),
         agents: fields.agents.trim() || undefined,
         llm: {
-          provider: fields.llmProvider,
+          provider: 'zerog' as const,
           model: fields.llmModel.trim() || undefined,
           temperature: Number.isFinite(llmTemp) ? llmTemp : 0.7,
           maxTokens: Number.isFinite(llmMax) ? llmMax : 1024,
         },
-        // Backend expects the string label; converts to the on-chain uint8 internally.
-        mode: fields.mode === 0 ? 'public' : 'permissioned',
       };
 
       // POST /v1/agents/mint — backend encrypts, uploads to 0G Storage, returns
@@ -275,7 +266,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
   // ------------------------------------------------------------------
   if (step !== 'form') {
     return (
-      <Modal title="Create Agent" onClose={onClose} wide maxHeight="80vh">
+      <Modal title="Create Agent" onClose={onClose} extraWide maxHeight="80vh">
         <MintProgress step={step as MintStep} error={mintError} />
         {step === 'error' && (
           <div className="flex justify-end mt-4">
@@ -296,7 +287,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
   // Render: form
   // ------------------------------------------------------------------
   return (
-    <Modal title="Create Agent" onClose={onClose} wide maxHeight="80vh">
+    <Modal title="Create Agent" onClose={onClose} extraWide maxHeight="80vh">
       {/* Wallet-not-ready banner */}
       {walletMissing && (
         <div
@@ -415,65 +406,6 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               Comma-separated (e.g. research, code, writing)
             </p>
           </div>
-
-          {/* Visibility */}
-          <div>
-            <ModalLabel>Visibility</ModalLabel>
-            <div className="flex gap-4 mt-1">
-              {(['public', 'unlisted'] as const).map((v) => (
-                <label key={v} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="visibility"
-                    value={v}
-                    checked={fields.visibility === v}
-                    onChange={() => setFields((prev) => ({ ...prev, visibility: v }))}
-                    className="accent-[var(--bf-fire)]"
-                  />
-                  <span className="text-sm capitalize text-white">{v}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Mode (Public / Permissioned) */}
-          <div>
-            <ModalLabel>Invocation mode</ModalLabel>
-            <div className="flex gap-4 mt-1">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="mode"
-                  value="0"
-                  checked={fields.mode === 0}
-                  onChange={() => setFields((prev) => ({ ...prev, mode: 0 }))}
-                  className="accent-[var(--bf-fire)]"
-                />
-                <div>
-                  <span className="text-sm text-white">Public</span>
-                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
-                    Anyone can invoke
-                  </p>
-                </div>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="mode"
-                  value="1"
-                  checked={fields.mode === 1}
-                  onChange={() => setFields((prev) => ({ ...prev, mode: 1 }))}
-                  className="accent-[var(--bf-fire)]"
-                />
-                <div>
-                  <span className="text-sm text-white">Permissioned</span>
-                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
-                    You authorize each server
-                  </p>
-                </div>
-              </label>
-            </div>
-          </div>
         </div>
 
         {/* ── SOUL ───────────────────────────────────────────────────── */}
@@ -529,45 +461,54 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
             LLM settings
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Provider */}
-            <div>
-              <ModalLabel>Provider</ModalLabel>
-              <select
-                value={fields.llmProvider}
-                onChange={set('llmProvider')}
-                className="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--bf-accent)]"
-                style={{ background: 'var(--bf-quaternary)', border: '1px solid transparent' }}
-              >
-                <option value="openai-compatible">OpenAI-compatible</option>
-                <option value="zerog">0G Compute</option>
-              </select>
+            <div className="sm:col-span-2">
+              <ModalLabel>Compute</ModalLabel>
+              <p className="text-sm font-medium text-white">0G Compute</p>
+              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--bf-gray)' }}>
+                Marketplace agents run inference through 0G&apos;s broker. Leave{' '}
+                <span className="text-white font-medium">Model</span> empty to let the broker choose, or enter a model name if you have one.
+              </p>
             </div>
 
             {/* Model */}
             <div>
-              <ModalLabel>Model</ModalLabel>
+              <ModalLabel>Model (optional)</ModalLabel>
               <ModalInput
                 type="text"
                 value={fields.llmModel}
                 onChange={set('llmModel')}
-                placeholder={
-                  fields.llmProvider === 'zerog' ? 'auto (broker selects)' : 'gpt-4o-mini'
-                }
+                placeholder="auto (broker selects)"
                 autoComplete="off"
               />
             </div>
 
             {/* Temperature */}
             <div>
-              <ModalLabel>Temperature</ModalLabel>
-              <ModalInput
-                type="number"
-                value={fields.llmTemperature}
-                onChange={set('llmTemperature')}
+              <div className="flex items-center justify-between gap-3 mb-1.5">
+                <span
+                  className="block text-xs font-semibold uppercase tracking-wider"
+                  style={{ color: 'var(--bf-gray)' }}
+                >
+                  Temperature
+                </span>
+                <span
+                  className="text-sm tabular-nums font-semibold shrink-0"
+                  style={{ color: 'var(--bf-accent)' }}
+                >
+                  {Number(fields.llmTemperature || 0).toFixed(1)}
+                </span>
+              </div>
+              <input
+                type="range"
                 min={0}
                 max={2}
                 step={0.1}
-                placeholder="0.7"
+                value={fields.llmTemperature}
+                onChange={set('llmTemperature')}
+                className="w-full h-2 rounded-full appearance-none cursor-pointer bg-[var(--bf-quinary)] accent-[var(--bf-accent)]"
+                aria-valuemin={0}
+                aria-valuemax={2}
+                aria-valuenow={Number(fields.llmTemperature)}
               />
               <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
                 0 = deterministic · 2 = very creative

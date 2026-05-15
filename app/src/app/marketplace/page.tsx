@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, Star, Cpu, Mic, Search, LayoutGrid, Plus,
   ChevronLeft, ChevronRight, ImagePlus, Share2, MoreHorizontal, X,
+  Flame, Sparkles, Bot,
 } from 'lucide-react';
 import { bf } from '@/lib/api-bonfire';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -17,42 +18,40 @@ import LeftNav from '@/components/layout/LeftNav';
 const NAV_ITEMS = [
   { label: 'Agents', icon: LayoutGrid },
   { label: 'Models', icon: Cpu },
-  { label: 'Voice',  icon: Mic },
+  { label: 'Voice', icon: Mic },
 ];
 
-const CATEGORIES = ['Home', 'Research', 'Code', 'Finance', 'Voice', 'Generalist'];
-
 const CATEGORY_COLOR: Record<string, string> = {
-  Research:   '#6e86d6',
-  Code:       '#43b581',
-  Finance:    '#faa61a',
-  Voice:      '#f97316',
-  Generalist: '#9b59b6',
+  Research: '#D0FF00',
+  Code: '#43b581',
+  Finance: '#D0FF00',
+  Voice: '#8116E0',
+  Generalist: '#8116E0',
 };
 
 const TAG_BANNER: Record<string, string> = {
-  research:   'linear-gradient(135deg,#1a237e 0%,#6e86d6 100%)',
-  code:       'linear-gradient(135deg,#1b5e20 0%,#43b581 100%)',
-  finance:    'linear-gradient(135deg,#e65100 0%,#faa61a 100%)',
-  voice:      'linear-gradient(135deg,#e65100 0%,#f97316 100%)',
-  generalist: 'linear-gradient(135deg,#4a148c 0%,#a855f7 100%)',
+  research: 'linear-gradient(135deg,#0a0014 0%,#2a0060 60%,#8116E0 100%)',
+  code: 'linear-gradient(135deg,#0a0014 0%,#1b3a1b 60%,#43b581 100%)',
+  finance: 'linear-gradient(135deg,#0a0014 0%,#1a1500 60%,#D0FF00 100%)',
+  voice: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
+  generalist: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
 };
 
 const TAG_COLOR: Record<string, string> = {
-  research:   '#6e86d6',
-  code:       '#43b581',
-  finance:    '#faa61a',
-  voice:      '#f97316',
-  generalist: '#9b59b6',
+  research: '#8116E0',
+  code: '#43b581',
+  finance: '#D0FF00',
+  voice: '#8116E0',
+  generalist: '#8116E0',
 };
 
 function agentBanner(a: BackendAgent) {
   const tag = a.tags[0]?.toLowerCase() ?? '';
-  return TAG_BANNER[tag] ?? 'linear-gradient(135deg,#1a1060 0%,#6e86d6 100%)';
+  return TAG_BANNER[tag] ?? 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)';
 }
 function agentColor(a: BackendAgent) {
   const tag = a.tags[0]?.toLowerCase() ?? '';
-  return TAG_COLOR[tag] ?? '#6e86d6';
+  return TAG_COLOR[tag] ?? '#8116E0';
 }
 
 // ── Detail overlay ────────────────────────────────────────────────────────────
@@ -68,7 +67,7 @@ function AgentDetailOverlay({
 }) {
   const [ssIdx, setSsIdx] = useState(0);
   const banner = agentBanner(agent);
-  const color  = agentColor(agent);
+  const color = agentColor(agent);
 
   return (
     <div
@@ -150,9 +149,8 @@ function AgentDetailOverlay({
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--bf-gray)' }}>Details</p>
               <div className="flex flex-col gap-2">
-                <DetailRow label="Slug"       value={`@${agent.slug}`} />
-                <DetailRow label="Visibility" value={agent.visibility} />
-                <DetailRow label="Created"    value={new Date(agent.createdAt).toLocaleDateString()} />
+                <DetailRow label="Slug" value={`@${agent.slug}`} />
+                <DetailRow label="Created" value={new Date(agent.createdAt).toLocaleDateString()} />
               </div>
             </div>
           </div>
@@ -171,17 +169,111 @@ function DetailRow({ label, value, color }: { label: string; value: string; colo
   );
 }
 
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState({
+  hasAgents,
+  query,
+  onClearSearch,
+  onCreateAgent,
+}: {
+  hasAgents: boolean;
+  query: string;
+  onClearSearch: () => void;
+  onCreateAgent?: () => void;
+}) {
+  const isFiltered = hasAgents && query;
+
+  if (isFiltered) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-5">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center"
+          style={{ background: 'var(--bf-secondary)' }}
+        >
+          <Search size={28} style={{ color: 'var(--bf-gray)' }} />
+        </div>
+        <div className="text-center">
+          <p className="text-white font-semibold text-base mb-1">No agents found</p>
+          <p className="text-sm" style={{ color: 'var(--bf-gray)' }}>
+            No results for <span className="text-white font-medium">&ldquo;{query}&rdquo;</span>. Try a different search.
+          </p>
+        </div>
+        <button
+          onClick={onClearSearch}
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-80"
+          style={{ background: 'var(--bf-accent)' }}
+        >
+          Clear filters
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-6">
+      {/* Glyph cluster */}
+      <div className="relative w-24 h-24">
+        <div
+          className="absolute inset-0 rounded-3xl flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)' }}
+        >
+          <Flame size={40} className="text-white opacity-90" />
+        </div>
+        <div
+          className="absolute -bottom-2 -right-2 w-9 h-9 rounded-xl flex items-center justify-center border-2"
+          style={{ background: 'var(--bf-secondary)', borderColor: 'var(--bf-quaternary)' }}
+        >
+          <Bot size={18} style={{ color: 'var(--bf-accent)' }} />
+        </div>
+        <div
+          className="absolute -top-2 -right-2 w-7 h-7 rounded-lg flex items-center justify-center border-2"
+          style={{ background: 'var(--bf-secondary)', borderColor: 'var(--bf-quaternary)' }}
+        >
+          <Sparkles size={14} style={{ color: '#faa61a' }} />
+        </div>
+      </div>
+
+      <div className="text-center max-w-sm">
+        <h3 className="text-white font-bold text-xl mb-2">No agents yet</h3>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--bf-gray)' }}>
+          The marketplace is empty. Be the first to publish an agent running verifiable inference on&nbsp;0G&nbsp;Compute.
+        </p>
+      </div>
+
+      <div className="flex flex-col items-center gap-3">
+        {onCreateAgent ? (
+          <button
+            onClick={onCreateAgent}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: 'var(--bf-fire)' }}
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            Create the first agent
+          </button>
+        ) : (
+          <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
+            Sign in to publish an agent.
+          </p>
+        )}
+        <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>
+          Agents are INFTs with on-chain provenance via 0G Storage
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Inner page ────────────────────────────────────────────────────────────────
 
 function MarketplaceInner() {
-  const [activeCategory, setActiveCategory] = useState('Home');
-  const [activeNav,      setActiveNav]      = useState('Agents');
-  const [query,          setQuery]          = useState('');
-  const [agents,         setAgents]         = useState<BackendAgent[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [inviteTarget,   setInviteTarget]   = useState<BackendAgent | null>(null);
-  const [detailAgent,    setDetailAgent]    = useState<BackendAgent | null>(null);
-  const [showCreate,     setShowCreate]     = useState(false);
+  const [activeNav, setActiveNav] = useState('Agents');
+  const [query, setQuery] = useState('');
+  const [agents, setAgents] = useState<BackendAgent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [inviteTarget, setInviteTarget] = useState<BackendAgent | null>(null);
+  const [detailAgent, setDetailAgent] = useState<BackendAgent | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const { status } = useAuth();
   const router = useRouter();
   const cancelRef = useRef(false);
@@ -198,10 +290,9 @@ function MarketplaceInner() {
 
   const filtered = agents.filter(a => {
     const matchNav = activeNav === 'Agents' || a.tags.some(t => t.toLowerCase() === activeNav.toLowerCase());
-    const matchCat = activeCategory === 'Home' || a.tags.some(t => t.toLowerCase() === activeCategory.toLowerCase());
-    const matchQ   = a.name.toLowerCase().includes(query.toLowerCase()) ||
-                     a.description.toLowerCase().includes(query.toLowerCase());
-    return matchNav && matchCat && matchQ;
+    const matchQ = a.name.toLowerCase().includes(query.toLowerCase()) ||
+      a.description.toLowerCase().includes(query.toLowerCase());
+    return matchNav && matchQ;
   });
 
   const featured = agents.slice(0, 3);
@@ -213,219 +304,222 @@ function MarketplaceInner() {
 
   return (
     <>
-    <div className="flex h-full" style={{ background: 'var(--bf-tertiary)' }}>
+      <div className="flex h-full" style={{ background: 'var(--bf-tertiary)' }}>
 
-      {/* Server rail */}
-      <LeftNav />
+        {/* Server rail */}
+        <LeftNav />
 
-      {/* Discover sidebar */}
-      <aside className="w-60 flex-shrink-0 flex flex-col border-r" style={{ background: 'var(--bf-secondary)', borderColor: 'var(--bf-quaternary)' }}>
-        <div className="px-4 h-12 border-b flex items-center" style={{ borderColor: 'var(--bf-quaternary)' }}>
-          <span className="font-bold" style={{ fontSize: 15, color: 'white' }}>Discover</span>
-        </div>
-        <div className="px-2 pt-3 flex flex-col gap-1">
-          {NAV_ITEMS.map(({ label, icon: Icon }) => {
-            const isActive = activeNav === label;
-            return (
-              <button
-                key={label}
-                onClick={() => { setActiveNav(label); setActiveCategory('Home'); }}
-                className="flex items-center gap-3 w-full px-3 py-2 rounded-md transition-colors"
-                style={{ color: isActive ? 'white' : 'var(--bf-gray)', background: isActive ? 'var(--bf-quinary)' : 'transparent', fontSize: 15, fontWeight: 500 }}
-                onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'var(--bf-quinary)'; (e.currentTarget as HTMLElement).style.color = 'white'; }}}
-                onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--bf-gray)'; }}}
-              >
-                <Icon size={20} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        {status === 'authenticated' && (
-          <div className="mt-auto px-3 pb-4 pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ background: 'var(--bf-fire)', fontSize: 14 }}
-            >
-              <Plus size={16} strokeWidth={2.5} />
-              Create Agent
-            </button>
+        {/* Discover sidebar */}
+        <aside className="w-60 flex-shrink-0 flex flex-col border-r" style={{ background: 'var(--bf-secondary)', borderColor: 'var(--bf-quaternary)' }}>
+          <div className="px-4 h-12 border-b flex items-center" style={{ borderColor: 'var(--bf-quaternary)' }}>
+            <span className="font-bold" style={{ fontSize: 15, color: 'white' }}>Discover</span>
           </div>
-        )}
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Hero banner */}
-        <div className="relative flex-shrink-0" style={{ background: 'linear-gradient(160deg,#1a1060 0%,#2d1f7a 40%,#6e86d6 100%)', minHeight: 260 }}>
-          <div className="flex items-center gap-1 px-6 border-b" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-            {CATEGORIES.map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)} className="px-4 py-3 border-b-2 transition-colors"
-                style={{ fontSize: 15, fontWeight: 500, borderColor: activeCategory === cat ? 'white' : 'transparent', color: activeCategory === cat ? 'white' : 'rgba(255,255,255,0.55)' }}>
-                {cat}
+          <div className="px-2 pt-3 flex flex-col gap-1">
+            {NAV_ITEMS.map(({ label, icon: Icon }) => {
+              const isActive = activeNav === label;
+              return (
+                <button
+                  key={label}
+                  onClick={() => { setActiveNav(label); }}
+                  className="flex items-center gap-3 w-full px-3 py-2 rounded-md transition-colors"
+                  style={{ color: isActive ? 'white' : 'var(--bf-gray)', background: isActive ? 'var(--bf-quinary)' : 'transparent', fontSize: 15, fontWeight: 500 }}
+                  onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'var(--bf-quinary)'; (e.currentTarget as HTMLElement).style.color = 'white'; } }}
+                  onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--bf-gray)'; } }}
+                >
+                  <Icon size={20} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {status === 'authenticated' && (
+            <div className="mt-auto px-3 pb-4 pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: 'var(--bf-fire)', fontSize: 14 }}
+              >
+                <Plus size={16} strokeWidth={2.5} />
+                Create Agent
               </button>
-            ))}
-            <div className="ml-auto flex items-center gap-2 my-2 px-3 py-1.5 rounded" style={{ background: 'rgba(0,0,0,0.3)' }}>
-              <Search size={14} style={{ color: 'rgba(255,255,255,0.6)' }} />
-              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search agents"
-                className="bg-transparent text-sm focus:outline-none w-36 text-white placeholder-white/50" />
+            </div>
+          )}
+        </aside>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+
+          {/* Hero banner */}
+          <div className="relative" style={{ background: 'linear-gradient(160deg,#0a0014 0%,#2a0060 45%,#8116E0 100%)', }}>
+            <div className="px-10 py-8">
+              <h1 className="font-display text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
+                {activeNav === 'Voice' ? (<>VOICE AGENTS<br />ON BONFIRE</>) :
+                  activeNav === 'Models' ? (<>LLM MODELS<br />ON BONFIRE</>) :
+                    (<>FIND YOUR AGENT<br />ON BONFIRE</>)}
+              </h1>
+              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
+                {activeNav === 'Voice' ? 'Real-time voice agents powered by LiveKit and 0G Compute.' :
+                  activeNav === 'Models' ? 'Browse available LLM models for your agents.' :
+                    'Every agent is an INFT running verifiable inference on 0G Compute.'}
+              </p>
             </div>
           </div>
-          <div className="px-10 pt-8 pb-10">
-            <h1 className="font-display text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
-              {activeNav === 'Voice'  ? (<>VOICE AGENTS<br />ON BONFIRE</>) :
-               activeNav === 'Models' ? (<>LLM MODELS<br />ON BONFIRE</>) :
-               activeCategory === 'Home' ? (<>FIND YOUR AGENT<br />ON BONFIRE</>) :
-               activeCategory}
-            </h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
-              {activeNav === 'Voice'  ? 'Real-time voice agents powered by LiveKit and 0G Compute.' :
-               activeNav === 'Models' ? 'Browse available LLM models for your agents.' :
-               activeCategory === 'Home' ? 'Every agent is an INFT running verifiable inference on 0G Compute.' :
-               `Browse ${activeCategory} agents on the BonFire marketplace.`}
-            </p>
-          </div>
-        </div>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto" style={{ background: 'var(--bf-tertiary)' }}>
-          <div className="max-w-5xl mx-auto px-8 py-8">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto" style={{ background: 'var(--bf-tertiary)' }}>
+            <div className="w-full px-8 py-4">
 
-            {loading ? (
-              <div className="grid grid-cols-3 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: 'var(--bf-secondary)' }} />
-                ))}
-              </div>
-            ) : (
-              <>
-                {/* Featured */}
-                {activeCategory === 'Home' && featured.length > 0 && (
-                  <section className="mb-10">
-                    <h2 className="text-white font-bold text-lg mb-4">Featured Agents</h2>
-                    <div className="grid grid-cols-3 gap-4">
-                      {featured.map(agent => (
-                        <div key={agent.id}
-                          className="rounded-xl overflow-hidden cursor-pointer"
-                          style={{ background: 'var(--bf-secondary)' }}
-                          onClick={() => setDetailAgent(agent)}
-                        >
-                          <div className="h-32 relative" style={{ background: agentBanner(agent) }}>
-                            {agent.avatarUrl
-                              ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
-                              : <div className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold text-white border-4" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
-                            }
-                          </div>
-                          <div className="pt-8 px-4 pb-4">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-bold text-white text-sm">{agent.name}</span>
+              {loading ? (
+                <div className="grid grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: 'var(--bf-secondary)' }} />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Featured */}
+                  {featured.length > 0 && (
+                    <section className="mb-10">
+                      <h2 className="text-white font-bold text-lg mb-4">Featured Agents</h2>
+                      <div className="grid grid-cols-3 gap-4">
+                        {featured.map(agent => (
+                          <div key={agent.id}
+                            className="rounded-xl overflow-hidden cursor-pointer"
+                            style={{ background: 'var(--bf-secondary)' }}
+                            onClick={() => setDetailAgent(agent)}
+                          >
+                            <div className="h-32 relative" style={{ background: agentBanner(agent) }}>
+                              {agent.avatarUrl
+                                ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
+                                : <div className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold text-white border-4" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
+                              }
                             </div>
-                            <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
-                            <div className="flex items-center justify-end">
-                              <button
-                                onClick={e => { e.stopPropagation(); openInvite(agent); }}
-                                className="text-xs px-3 py-1 rounded font-semibold text-white"
-                                style={{ background: 'var(--bf-accent)' }}
-                              >
-                                Invite
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* All agents */}
-                <section>
-                  <h2 className="text-white font-bold text-lg mb-4">
-                    {activeCategory === 'Home' ? 'All Agents' : activeCategory}
-                  </h2>
-                  {filtered.length === 0 ? (
-                    <p className="text-center py-12 text-sm" style={{ color: 'var(--bf-gray)' }}>No agents match your filter.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {filtered.map(agent => (
-                        <div key={agent.id}
-                          className="rounded-xl overflow-hidden cursor-pointer"
-                          style={{ background: 'var(--bf-secondary)' }}
-                          onClick={() => setDetailAgent(agent)}
-                        >
-                          {/* Mini banner */}
-                          <div className="h-16 relative" style={{ background: agentBanner(agent) }}>
-                            {agent.avatarUrl
-                              ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
-                              : <div className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white border-2" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
-                            }
-                          </div>
-                          <div className="pt-7 px-4 pb-4 flex flex-col gap-2">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-white font-bold text-sm">{agent.name}</span>
-                                </div>
-                                {agent.tags[0] && (
-                                  <span className="text-xs px-2 py-0.5 rounded font-medium"
-                                    style={{ background: (CATEGORY_COLOR[agent.tags[0]] ?? '#888') + '33', color: CATEGORY_COLOR[agent.tags[0]] ?? '#888' }}>
-                                    {agent.tags[0]}
-                                  </span>
-                                )}
+                            <div className="pt-8 px-4 pb-4">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-white text-sm">{agent.name}</span>
+                              </div>
+                              <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
+                              <div className="flex items-center justify-end">
+                                <button
+                                  onClick={e => { e.stopPropagation(); openInvite(agent); }}
+                                  className="text-xs px-3 py-1 rounded font-semibold text-white"
+                                  style={{ background: 'var(--bf-accent)' }}
+                                >
+                                  Invite
+                                </button>
                               </div>
                             </div>
-                            <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
-                            <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
-                              <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
-                              <button
-                                onClick={e => { e.stopPropagation(); openInvite(agent); }}
-                                className="text-xs px-3 py-1.5 rounded font-semibold text-white"
-                                style={{ background: 'var(--bf-accent)' }}
-                              >
-                                Invite
-                              </button>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* All agents */}
+                  <section>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                      <h2 className="text-white font-bold text-lg shrink-0">All Agents</h2>
+                      <div
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[220px] sm:max-w-sm"
+                        style={{ background: 'var(--bf-secondary)', border: '1px solid var(--bf-quaternary)' }}
+                      >
+                        <Search size={16} style={{ color: 'var(--bf-gray)', flexShrink: 0 }} />
+                        <input
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                          placeholder="Search agents"
+                          className="bg-transparent text-sm focus:outline-none flex-1 min-w-0 text-white placeholder:opacity-50"
+                          style={{ color: 'white' }}
+                        />
+                      </div>
+                    </div>
+                    {filtered.length === 0 ? (
+                      <EmptyState
+                        hasAgents={agents.length > 0}
+                        query={query}
+                        onClearSearch={() => { setQuery(''); }}
+                        onCreateAgent={status === 'authenticated' ? () => setShowCreate(true) : undefined}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map(agent => (
+                          <div key={agent.id}
+                            className="rounded-xl overflow-hidden cursor-pointer"
+                            style={{ background: 'var(--bf-secondary)' }}
+                            onClick={() => setDetailAgent(agent)}
+                          >
+                            {/* Mini banner */}
+                            <div className="h-16 relative" style={{ background: agentBanner(agent) }}>
+                              {agent.avatarUrl
+                                ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
+                                : <div className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white border-2" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
+                              }
+                            </div>
+                            <div className="pt-7 px-4 pb-4 flex flex-col gap-2">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span className="text-white font-bold text-sm">{agent.name}</span>
+                                  </div>
+                                  {agent.tags[0] && (
+                                    <span className="text-xs px-2 py-0.5 rounded font-medium"
+                                      style={{ background: (CATEGORY_COLOR[agent.tags[0]] ?? '#888') + '33', color: CATEGORY_COLOR[agent.tags[0]] ?? '#888' }}>
+                                      {agent.tags[0]}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
+                              <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
+                                <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
+                                <button
+                                  onClick={e => { e.stopPropagation(); openInvite(agent); }}
+                                  className="text-xs px-3 py-1.5 rounded font-semibold text-white"
+                                  style={{ background: 'var(--bf-accent)' }}
+                                >
+                                  Invite
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </>
-            )}
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {/* Detail overlay */}
-    {detailAgent && (
-      <AgentDetailOverlay
-        agent={detailAgent}
-        onClose={() => setDetailAgent(null)}
-        onInvite={openInvite}
-      />
-    )}
+      {/* Detail overlay */}
+      {detailAgent && (
+        <AgentDetailOverlay
+          agent={detailAgent}
+          onClose={() => setDetailAgent(null)}
+          onInvite={openInvite}
+        />
+      )}
 
-    {/* Invite modal */}
-    {inviteTarget && (
-      <InviteToServerModal
-        agent={inviteTarget}
-        onClose={() => setInviteTarget(null)}
-      />
-    )}
+      {/* Invite modal */}
+      {inviteTarget && (
+        <InviteToServerModal
+          agent={inviteTarget}
+          onClose={() => setInviteTarget(null)}
+        />
+      )}
 
-    {/* Create agent modal */}
-    {showCreate && (
-      <CreateAgentModal
-        onClose={() => setShowCreate(false)}
-        onCreated={newAgent => {
-          setAgents(prev => [newAgent, ...prev]);
-          setShowCreate(false);
-        }}
-      />
-    )}
+      {/* Create agent modal */}
+      {showCreate && (
+        <CreateAgentModal
+          onClose={() => setShowCreate(false)}
+          onCreated={newAgent => {
+            setAgents(prev => [newAgent, ...prev]);
+            setShowCreate(false);
+          }}
+        />
+      )}
     </>
   );
 }

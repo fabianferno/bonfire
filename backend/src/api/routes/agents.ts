@@ -35,7 +35,6 @@ const CreateAgentBody = z.object({
   bio: z.string().max(10_000).nullish(),
   avatarUrl: z.string().url().nullish(),
   tags: z.array(z.string().min(1).max(32)).max(16).optional(),
-  visibility: z.enum(['public', 'unlisted']).default('public'),
   soul: z.string().max(10_000).optional(),
   agents: z.string().max(10_000).optional(),
   env: z.record(z.string(), z.string()).optional(),
@@ -48,7 +47,6 @@ const PatchAgentBody = z.object({
   bio: z.string().max(10_000).nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
   tags: z.array(z.string().min(1).max(32)).max(16).optional(),
-  visibility: z.enum(['public', 'unlisted']).optional(),
   baseUrl: z.string().url().optional(),
   soul: z.string().max(10_000).optional(),
   agents: z.string().max(10_000).optional(),
@@ -169,7 +167,6 @@ export function agentRoutes(deps: AgentRouteDeps) {
     if (parsed.data.bio !== undefined) $set.bio = parsed.data.bio;
     if (parsed.data.avatarUrl !== undefined) $set.avatarUrl = parsed.data.avatarUrl;
     if (parsed.data.tags !== undefined) $set.tags = parsed.data.tags;
-    if (parsed.data.visibility !== undefined) $set.visibility = parsed.data.visibility;
     if (parsed.data.baseUrl !== undefined) $set.baseUrl = parsed.data.baseUrl;
     const updated = await deps.db.collection(collections.agents).findOneAndUpdate(
       { _id: a._id }, { $set }, { returnDocument: 'after' }
@@ -214,7 +211,6 @@ export function agentRoutes(deps: AgentRouteDeps) {
       temperature: z.number().min(0).max(2).optional(),
       maxTokens: z.number().min(1).max(32000).optional(),
     }).default({}),
-    mode: z.enum(['public', 'permissioned']).default('public'),
   });
 
   /** Zod schema for POST /v1/agents/mint/confirm */
@@ -237,7 +233,8 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const parsed = MintRequestSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
 
-    const { slug, name, description, avatarUrl, tags, soul, agents: agentsText, llm, mode } = parsed.data;
+    const { slug, name, description, avatarUrl, tags, soul, agents: agentsText, llm } =
+      parsed.data;
     const user = c.get('user');
 
     // 1. Check slug uniqueness across agents collection
@@ -301,7 +298,6 @@ export function agentRoutes(deps: AgentRouteDeps) {
       bundleUri,
       sealedDEKBaseUri,
       bundleHash: bundleHashHex,
-      mode,
       status: 'uploaded',
       createdAt: now,
       expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // +24h
@@ -319,7 +315,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
       throw e;
     }
 
-    const chainMode = mode === 'public' ? 0 : 1;
+    const chainMode = 0;
 
     return c.json({
       mintPayload: {
@@ -409,7 +405,6 @@ export function agentRoutes(deps: AgentRouteDeps) {
       tokenId: mintResult.tokenId.toString(),
       contractAddress: process.env.INFT_CONTRACT_ADDRESS ?? undefined,
       ownerWallet: mintResult.owner,
-      mode: mintResult.mode === 0 ? 'public' : 'permissioned',
       manifestUri: reservation.manifestUri,
       bundleUri: reservation.bundleUri,
       sealedDEKBaseUri: reservation.sealedDEKBaseUri,

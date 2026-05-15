@@ -1,6 +1,5 @@
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { LRUCache } from 'lru-cache';
 import { collections } from '../db/types.js';
 import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc, ServerDoc } from '../db/types.js';
 import { findAgentByIdOrSlug } from './registry.js';
@@ -15,61 +14,20 @@ import type { OgStorageClient } from '../storage-0g/index.js';
 import { decryptAgentBundle } from './inft-decrypt.js';
 
 // ---------------------------------------------------------------------------
-// INFT authorization gate
+// INFT invocation (bundle decrypt)
 // ---------------------------------------------------------------------------
 
 /**
- * Dependencies injected by the caller for on-chain authorization and bundle decryption.
+ * Dependencies injected by the caller for bundle decryption.
  * All three fields must be present to enable the INFT invocation path.
  */
 export interface InftDeps {
-  /** On-chain client used to read isAuthorized() and agentOf(). */
+  /** On-chain client (e.g. agentOf); not used for invocation gating. */
   inft: InftChain;
   /** 0G Storage client used to fetch encryptedBundle and sealedDEK. */
   storage: OgStorageClient;
   /** Hex private key of the platform-executor wallet (ECIES decryption). */
   platformExecutorPrivkey: string;
-}
-
-/**
- * LRU cache for on-chain authorization results.
- * Key: "<tokenId>:<serverWallet-lowercase>"; TTL: 60 seconds.
- * A 60-second window is acceptable — revocations are low-frequency and the
- * cache prevents thundering-herd on chain reads during burst invocations.
- */
-const authCache = new LRUCache<string, boolean>({ max: 5000, ttl: 60_000 });
-
-/**
- * Determine whether an invocation should be allowed for a given agent + server wallet.
- *
- * Rules:
- *  - Legacy agents (no tokenId) → always allowed.
- *  - Public-mode INFT agents    → always allowed (no authorization check needed).
- *  - Permissioned INFT agents   → check isAuthorized(tokenId, serverWallet) on-chain,
- *                                  with a 60-second LRU cache.
- *
- * @param agent        - The AgentDoc being invoked
- * @param serverWallet - The server's 0G wallet address (executor)
- * @param deps         - INFT chain + storage deps
- * @returns true if invocation is permitted, false otherwise
- */
-export async function isInvocationAllowed(
-  agent: AgentDoc,
-  serverWallet: string,
-  deps: InftDeps,
-): Promise<boolean> {
-  // Legacy non-INFT agents — always allowed
-  if (!agent.tokenId) return true;
-  // Public-mode agents are open to all servers — no chain read needed
-  if (agent.mode === 'public') return true;
-
-  const k = `${agent.tokenId}:${serverWallet.toLowerCase()}`;
-  const cached = authCache.get(k);
-  if (cached !== undefined) return cached;
-
-  const allowed = await deps.inft.isAuthorized(BigInt(agent.tokenId), serverWallet);
-  authCache.set(k, allowed);
-  return allowed;
 }
 
 /**
@@ -99,14 +57,6 @@ export async function buildInlineTenant(
   return { slug: agent.slug, name: agent.name, ...bundle };
 }
 
-/**
- * Invalidate the authorization cache for a specific (tokenId, serverWallet) pair.
- * Call this after a UsageRevoked or ModeChanged chain event is observed by the indexer.
- */
-export function invalidateAuthCache(tokenId: string, serverWallet: string): void {
-  authCache.delete(`${tokenId}:${serverWallet.toLowerCase()}`);
-}
-
 export function chatIdForChannel(channelId: ObjectId): string {
   return `bonfire:channel:${channelId.toHexString()}`;
 }
@@ -115,9 +65,9 @@ export interface InvocationContext {
   db: Db;
   channel: ChannelDoc;
   userMessage: MessageDoc;
-  /** Present when this invocation can resolve INFT-backed agents. */
+  /** Present when decrypting INFT bundles for agent invocation. */
   inftDeps?: InftDeps;
-  /** Server wallet address used as the executor for on-chain authorization checks. */
+  /** Server wallet for downstream env overrides — not used for authorization. */
   serverWallet?: string;
 }
 
@@ -155,15 +105,9 @@ export async function startStreamingInvocation(
   const chatId = chatIdForChannel(ctx.channel._id);
   for (const agent of agents) {
     try {
-      // INFT gate + bundle decrypt (streaming path)
+      // INFT bundle decrypt (streaming path)
       let tenantInline: TenantPayload | undefined;
       if (ctx.inftDeps && agent.tokenId) {
-        const wallet = ctx.serverWallet ?? '';
-        const allowed = await isInvocationAllowed(agent, wallet, ctx.inftDeps);
-        if (!allowed) {
-          log.warn({ agentSlug: agent.slug, serverWallet: wallet }, 'streaming invocation denied — no on-chain authorization');
-          continue;
-        }
         try {
           tenantInline = await buildInlineTenant(agent, ctx.inftDeps);
         } catch (decryptErr) {
@@ -445,9 +389,9 @@ async function runInvocationLinked(args: {
   rootId: ObjectId;
   /** Per-request env overrides forwarded to the agent (e.g. DEPLOYER_PRIVATE_KEY for 0G inference). */
   envOverride?: Record<string, string>;
-  /** INFT authorization + decryption deps. Present only when INFT gate is active. */
+  /** INFT bundle decryption deps when invoking token-backed agents. */
   inftDeps?: InftDeps;
-  /** Server wallet address used as the on-chain executor for authorization checks. */
+  /** Server wallet for env overrides — not used for authorization. */
   serverWallet?: string;
 }): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
@@ -457,15 +401,9 @@ async function runInvocationLinked(args: {
   const speakerIsHuman = args.parent.authorType === 'user';
   for (const agent of args.agents) {
     try {
-      // INFT authorization gate + bundle decryption (only when inftDeps injected)
+      // INFT bundle decryption (only when inftDeps injected)
       let tenantInline: TenantPayload | undefined;
       if (args.inftDeps && agent.tokenId) {
-        const wallet = args.serverWallet ?? '';
-        const allowed = await isInvocationAllowed(agent, wallet, args.inftDeps);
-        if (!allowed) {
-          log.warn({ agentSlug: agent.slug, serverWallet: wallet }, 'invocation denied — no on-chain authorization');
-          continue;
-        }
         try {
           tenantInline = await buildInlineTenant(agent, args.inftDeps);
         } catch (decryptErr) {

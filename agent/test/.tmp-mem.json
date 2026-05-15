@@ -1,0 +1,1 @@
+{"v":1,"vecDim":8,"nextSessionId":2,"nextMessageId":2,"nextVectorRowid":2,"sessions":[{"id":1,"channel":"web","chat_id":"u1","topic":"","created_at":1778838060046}],"messages":[{"id":1,"session_id":1,"role":"user","content":"persist me","created_at":1778838060046}],"vectors":[{"rowid":1,"session_id":1,"ref":"msg-1","snippet":"persist me","vec":[1,0,0,0,0,0,0,0]}]}

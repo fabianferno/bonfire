@@ -207,7 +207,7 @@ export class ChainIndexer {
   private async handleAgentMinted(
     tokenId: bigint,
     owner: string,
-    mode: number,
+    _mode: number,
     bundleHash: string,
   ): Promise<void> {
     const tokenStr = tokenId.toString();
@@ -252,7 +252,6 @@ export class ChainIndexer {
       tokenId: tokenStr,
       contractAddress: this.deps.contractAddress,
       ownerWallet: owner,
-      mode: mode === 0 ? 'public' : 'permissioned',
       manifestUri: reservation.manifestUri,
       bundleUri: reservation.bundleUri,
       sealedDEKBaseUri: reservation.sealedDEKBaseUri,
@@ -283,33 +282,21 @@ export class ChainIndexer {
   /**
    * Handle `ModeChanged(tokenId, oldMode, newMode)`.
    *
-   * Updates the cached `mode` field in the AgentDoc so the next invocation
-   * gate check uses the correct value without needing an on-chain read.
+   * Mode is ignored at the application layer — invocation does not gate on-chain mode.
    */
   private async handleModeChanged(tokenId: bigint, newMode: number): Promise<void> {
-    const tokenStr = tokenId.toString();
-    await this.deps.db.collection<AgentDoc>(collections.agents).updateOne(
-      { tokenId: tokenStr },
-      {
-        $set: {
-          mode: newMode === 0 ? 'public' : 'permissioned',
-          updatedAt: new Date(),
-        },
-      },
-    );
-    log.info({ tokenStr, newMode }, 'chain indexer: agent mode updated');
+    log.info({ tokenStr: tokenId.toString(), newMode }, 'chain indexer: ModeChanged (ignored)');
   }
 
   /**
    * Handle `UsageAuthorized` / `UsageRevoked`.
    *
-   * The auth cache has a 60-second TTL and self-heals. Log the event so
-   * operators can trace any cache lag if needed.
+   * Logged for operators; invocation does not consult on-chain authorization.
    */
   private async handleAuthChange(tokenId: bigint, executor: string): Promise<void> {
     log.info(
       { tokenId: tokenId.toString(), executor },
-      'chain indexer: authorization changed — auth cache will self-heal within 60 s',
+      'chain indexer: UsageAuthorized/Revoked (informational)',
     );
   }
 }

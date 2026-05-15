@@ -42,7 +42,7 @@ async function pickVoiceChannelAndInftAgent() {
   await c.connect();
   const db = c.db(DB);
   const ch = await db.collection('channels').findOne({ type: 'voice' });
-  const agent = await db.collection('agents').findOne({ tokenId: { $exists: true }, mode: 'public' });
+  const agent = await db.collection('agents').findOne({ tokenId: { $exists: true } });
   await c.close();
   if (!ch) fail('no voice channel in DB');
   if (!agent) fail('no INFT-backed agent available to invite');

@@ -1,7 +1,7 @@
 import type { AgentStatus } from "@/context/AppContext";
 
 const COLORS: Record<AgentStatus, string> = {
-  online:  "#43b581",
+  online:  "var(--bf-accent)",
   busy:    "#f04747",
   idle:    "#faa61a",
   offline: "#747f8d",

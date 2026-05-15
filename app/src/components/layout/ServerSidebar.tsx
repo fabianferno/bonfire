@@ -135,7 +135,7 @@ export default function ServerSidebar() {
                     <div className="relative flex-shrink-0">
                       <Avatar name={p.userName} size={18} color="#6e86d6" />
                       <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border"
-                        style={{ background: "var(--bf-green)", borderColor: "var(--bf-secondary)" }} />
+                        style={{ background: "var(--bf-accent)", borderColor: "var(--bf-secondary)" }} />
                     </div>
                     <span className="text-xs truncate" style={{ color: "var(--bf-gray)" }}>
                       {p.userName.startsWith("did:") ? p.userName.slice(0, 14) + "…" : p.userName}
@@ -156,8 +156,8 @@ export default function ServerSidebar() {
             {/* Status row */}
             <div className="flex items-center justify-between px-1 mb-1.5">
               <div className="flex items-center gap-1.5">
-                <Signal size={13} strokeWidth={2.5} style={{ color: "var(--bf-green)" }} />
-                <span className="text-xs font-semibold" style={{ color: "var(--bf-green)" }}>Voice Connected</span>
+                <Signal size={13} strokeWidth={2.5} style={{ color: "var(--bf-accent)" }} />
+                <span className="text-xs font-semibold" style={{ color: "var(--bf-accent)" }}>Voice Connected</span>
               </div>
               <button onClick={voice.leave} title="Disconnect"
                 className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--bf-quinary)] transition-colors"
@@ -186,7 +186,7 @@ export default function ServerSidebar() {
             <div className="relative flex-shrink-0">
               <Avatar name={user.username} size={32} src={user.avatar} color="#6e86d6" />
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
-                style={{ background: "var(--bf-green)", borderColor: "var(--bf-quaternary)" }} />
+                style={{ background: "var(--bf-accent)", borderColor: "var(--bf-quaternary)" }} />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white leading-none truncate">{user.username}</p>
@@ -276,10 +276,10 @@ function VoiceChannelRow({ name, active, joined, joining, onClick }: {
   return (
     <button onClick={onClick}
       className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left text-sm transition-colors"
-      style={{ background: active ? "var(--bf-quinary)" : "transparent", color: joined ? "var(--bf-green)" : active ? "white" : "var(--bf-senary)" }}
+      style={{ background: active ? "var(--bf-quinary)" : "transparent", color: joined ? "var(--bf-accent)" : active ? "white" : "var(--bf-senary)" }}
       onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-      <Volume2 size={18} style={{ color: joined ? "var(--bf-green)" : "var(--bf-symbol)", flexShrink: 0 }} />
+      <Volume2 size={18} style={{ color: joined ? "var(--bf-accent)" : "var(--bf-symbol)", flexShrink: 0 }} />
       <span className="truncate flex-1">{name}</span>
       {joining && <span className="text-xs" style={{ color: "var(--bf-gray)" }}>…</span>}
     </button>
@@ -368,9 +368,9 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
       </button>
       {expanded && entry.teeHash && (
         <div className="px-3 pb-3 pt-0 flex items-center gap-2" style={{ borderTop: "1px solid var(--bf-quinary)" }}>
-          <ShieldCheck size={13} strokeWidth={2} style={{ color: "#43b581", flexShrink: 0 }} />
+          <ShieldCheck size={13} strokeWidth={2} style={{ color: "var(--bf-accent)", flexShrink: 0 }} />
           <code className="text-xs flex-1 truncate" style={{ color: "var(--bf-accent)" }}>{entry.teeHash}</code>
-          <span className="text-xs font-semibold" style={{ color: "#43b581" }}>TEE Verified</span>
+          <span className="text-xs font-semibold" style={{ color: "var(--bf-accent)" }}>TEE Verified</span>
         </div>
       )}
     </div>

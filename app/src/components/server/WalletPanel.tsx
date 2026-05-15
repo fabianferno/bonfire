@@ -73,7 +73,7 @@ export default function WalletPanel({ serverId }: Props) {
     bal === null ? null :
     bal >= 10   ? { label: "Blazing",  color: "#f97316" } :
     bal >= 2    ? { label: "Powered",  color: "#7c9cf5" } :
-    bal >= 0.5  ? { label: "Active",   color: "#57c98a" } :
+    bal >= 0.5  ? { label: "Active",   color: "var(--bf-accent)" } :
                   { label: "Low",      color: "#f05b5b" };
 
   return (

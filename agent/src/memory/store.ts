@@ -1,7 +1,5 @@
-import Database from 'better-sqlite3';
-import * as sqliteVec from 'sqlite-vec';
-import path from 'node:path';
 import fs from 'node:fs';
+import path from 'node:path';
 
 export interface Message {
   id: number;
@@ -11,76 +9,165 @@ export interface Message {
   created_at: number;
 }
 
+interface VectorEntry {
+  rowid: number;
+  session_id: number;
+  ref: string;
+  snippet: string;
+  vec: number[];
+}
+
+interface Snapshot {
+  v: 1;
+  vecDim: number;
+  nextSessionId: number;
+  nextMessageId: number;
+  nextVectorRowid: number;
+  sessions: Array<{ id: number; channel: string; chat_id: string; topic: string; created_at: number }>;
+  messages: Message[];
+  vectors: VectorEntry[];
+}
+
+const FLUSH_DEBOUNCE_MS = 250;
+
 export class MemoryStore {
-  private db: Database.Database;
   private vecDim: number;
-  constructor(dbPath: string, vecDim = 1536) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
-    sqliteVec.load(this.db);
+  private filePath: string | null;
+  private sessions: Snapshot['sessions'] = [];
+  private messages: Message[] = [];
+  private vectors: VectorEntry[] = [];
+  private nextSessionId = 1;
+  private nextMessageId = 1;
+  private nextVectorRowid = 1;
+  private flushTimer: NodeJS.Timeout | null = null;
+  private closed = false;
+
+  constructor(filePath?: string, vecDim = 1536) {
     this.vecDim = vecDim;
-    this.migrate();
+    this.filePath = filePath ?? null;
+    if (this.filePath) this.load();
   }
-  private migrate() {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        channel TEXT NOT NULL,
-        chat_id TEXT NOT NULL,
-        topic TEXT DEFAULT '',
-        created_at INTEGER NOT NULL,
-        UNIQUE(channel, chat_id, topic)
-      );
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id INTEGER NOT NULL,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY(session_id) REFERENCES sessions(id)
-      );
-      CREATE VIRTUAL TABLE IF NOT EXISTS vectors USING vec0(
-        embedding float[${this.vecDim}]
-      );
-      CREATE TABLE IF NOT EXISTS vector_meta (
-        rowid INTEGER PRIMARY KEY,
-        session_id INTEGER NOT NULL,
-        ref TEXT NOT NULL,
-        snippet TEXT NOT NULL
-      );
-    `);
+
+  private load() {
+    if (!this.filePath || !fs.existsSync(this.filePath)) return;
+    try {
+      const raw = fs.readFileSync(this.filePath, 'utf8');
+      const snap = JSON.parse(raw) as Snapshot;
+      this.vecDim = snap.vecDim ?? this.vecDim;
+      this.sessions = snap.sessions ?? [];
+      this.messages = snap.messages ?? [];
+      this.vectors = snap.vectors ?? [];
+      this.nextSessionId = snap.nextSessionId ?? (this.sessions.reduce((m, s) => Math.max(m, s.id), 0) + 1);
+      this.nextMessageId = snap.nextMessageId ?? (this.messages.reduce((m, x) => Math.max(m, x.id), 0) + 1);
+      this.nextVectorRowid = snap.nextVectorRowid ?? (this.vectors.reduce((m, x) => Math.max(m, x.rowid), 0) + 1);
+    } catch {
+      // Corrupt snapshot — start fresh rather than crashing the agent on boot.
+    }
   }
+
+  private schedulePersist() {
+    if (!this.filePath || this.closed) return;
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.persistNow();
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  private persistNow() {
+    if (!this.filePath) return;
+    const snap: Snapshot = {
+      v: 1,
+      vecDim: this.vecDim,
+      nextSessionId: this.nextSessionId,
+      nextMessageId: this.nextMessageId,
+      nextVectorRowid: this.nextVectorRowid,
+      sessions: this.sessions,
+      messages: this.messages,
+      vectors: this.vectors,
+    };
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    // Atomic write: tmp file + rename.
+    const tmp = `${this.filePath}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(snap));
+    fs.renameSync(tmp, this.filePath);
+  }
+
   getOrCreateSession(channel: string, chatId: string, topic = ''): number {
-    const row = this.db.prepare(`SELECT id FROM sessions WHERE channel=? AND chat_id=? AND topic=?`).get(channel, chatId, topic) as any;
-    if (row) return row.id;
-    const r = this.db.prepare(`INSERT INTO sessions(channel,chat_id,topic,created_at) VALUES(?,?,?,?)`).run(channel, chatId, topic, Date.now());
-    return Number(r.lastInsertRowid);
+    const found = this.sessions.find(s => s.channel === channel && s.chat_id === chatId && s.topic === topic);
+    if (found) return found.id;
+    const id = this.nextSessionId++;
+    this.sessions.push({ id, channel, chat_id: chatId, topic, created_at: Date.now() });
+    this.schedulePersist();
+    return id;
   }
+
   appendMessage(sessionId: number, role: Message['role'], content: string): number {
-    const r = this.db.prepare(`INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)`).run(sessionId, role, content, Date.now());
-    return Number(r.lastInsertRowid);
+    const id = this.nextMessageId++;
+    this.messages.push({ id, session_id: sessionId, role, content, created_at: Date.now() });
+    this.schedulePersist();
+    return id;
   }
+
   recentMessages(sessionId: number, limit = 50): Message[] {
-    return this.db.prepare(`SELECT * FROM messages WHERE session_id=? ORDER BY id ASC LIMIT ?`).all(sessionId, limit) as Message[];
+    return this.messages.filter(m => m.session_id === sessionId).slice(0, limit);
   }
+
   indexVector(sessionId: number, ref: string, snippet: string, vec: Float32Array) {
-    const r = this.db.prepare(`INSERT INTO vectors(embedding) VALUES(?)`).run(Buffer.from(vec.buffer));
-    this.db.prepare(`INSERT INTO vector_meta(rowid,session_id,ref,snippet) VALUES(?,?,?,?)`).run(Number(r.lastInsertRowid), sessionId, ref, snippet);
+    this.vectors.push({
+      rowid: this.nextVectorRowid++,
+      session_id: sessionId,
+      ref,
+      snippet,
+      vec: Array.from(vec),
+    });
+    this.schedulePersist();
   }
+
   searchVectors(vec: Float32Array, k = 5): { snippet: string; ref: string; distance: number }[] {
-    return this.db.prepare(`
-      SELECT m.snippet, m.ref, v.distance
-      FROM vectors v
-      JOIN vector_meta m ON m.rowid = v.rowid
-      WHERE v.embedding MATCH ? AND k = ?
-      ORDER BY v.distance ASC
-    `).all(Buffer.from(vec.buffer), k) as any;
+    const scored = this.vectors.map(v => ({
+      snippet: v.snippet,
+      ref: v.ref,
+      distance: cosineDistance(vec, v.vec),
+    }));
+    scored.sort((a, b) => a.distance - b.distance);
+    return scored.slice(0, k);
   }
+
   countMessages(sessionId: number): number {
-    return (this.db.prepare(`SELECT COUNT(*) as c FROM messages WHERE session_id=?`).get(sessionId) as any).c;
+    let c = 0;
+    for (const m of this.messages) if (m.session_id === sessionId) c++;
+    return c;
   }
+
   deleteOldMessages(sessionId: number, keepLast: number) {
-    this.db.prepare(`DELETE FROM messages WHERE session_id=? AND id NOT IN (SELECT id FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?)`).run(sessionId, sessionId, keepLast);
+    const idsDesc = this.messages
+      .filter(m => m.session_id === sessionId)
+      .map(m => m.id)
+      .sort((a, b) => b - a);
+    const keep = new Set(idsDesc.slice(0, keepLast));
+    this.messages = this.messages.filter(m => m.session_id !== sessionId || keep.has(m.id));
+    this.schedulePersist();
   }
-  close() { this.db.close(); }
+
+  close() {
+    this.closed = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.persistNow();
+  }
+}
+
+function cosineDistance(a: Float32Array | number[], b: Float32Array | number[]): number {
+  const n = Math.min(a.length, b.length);
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < n; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 1;
+  return 1 - dot / (Math.sqrt(na) * Math.sqrt(nb));
 }

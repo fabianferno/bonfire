@@ -49,8 +49,8 @@ export default function VoiceChannel({ channelId, channelName }: Props) {
           </p>
           <button
             onClick={join}
-            className="px-8 py-2.5 rounded-lg font-bold text-white text-sm transition-opacity hover:opacity-90"
-            style={{ background: "var(--bf-green)" }}
+            className="px-8 py-2.5 rounded-lg font-bold text-black text-sm transition-opacity hover:opacity-90"
+            style={{ background: "var(--bf-accent)" }}
           >
             Join Voice
           </button>

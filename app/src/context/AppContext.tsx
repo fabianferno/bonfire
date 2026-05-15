@@ -163,6 +163,9 @@ interface AppContextValue {
   activeChannel: Channel | undefined;
   loading: boolean;
   error: string | null;
+  /** What the user wants agents (and the UI) to call them. Persisted to localStorage. */
+  preferredName: string;
+  setPreferredName: (name: string) => void;
 }
 
 // ─── Example / demo agents ────────────────────────────────────────────────
@@ -289,6 +292,7 @@ const uid = () => {
 };
 
 const LS_ACTIVE_SERVER = "bonfire_active_server";
+const LS_PREFERRED_NAME = "bonfire_preferred_name";
 
 // ─── Mappers ───────────────────────────────────────────────────────────────
 
@@ -400,6 +404,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [servers, setServers] = useState<Server[]>([]);
   const [activeServerId, setActiveServerId] = useState("");
+  const [preferredName, setPreferredNameState] = useState("");
+
+  // Load preferred name on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = localStorage.getItem(LS_PREFERRED_NAME);
+    if (stored) setPreferredNameState(stored);
+  }, []);
+
+  const setPreferredName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    setPreferredNameState(trimmed);
+    if (typeof window !== "undefined") {
+      if (trimmed) localStorage.setItem(LS_PREFERRED_NAME, trimmed);
+      else localStorage.removeItem(LS_PREFERRED_NAME);
+    }
+  }, []);
   const [activeChannelId, setActiveChannelId] = useState("");
   const [activeVoiceChannelId, setActiveVoiceChannelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -853,6 +874,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         activeChannel,
         loading,
         error,
+        preferredName,
+        setPreferredName,
       }}
     >
       {children}

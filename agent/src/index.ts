@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { loadAgent } from './config/loader.js';
 import { createChatModel, createEmbeddingModel } from './runtime/llm-client.js';
 import { MemoryStore } from './memory/store.js';
+import { assertInside } from './util/paths.js';
 import { loadSkills, watchSkills } from './skills/loader.js';
 import { startMcpServers, type McpHandle } from './tools/mcp-client.js';
 import { buildToolRegistry } from './tools/registry.js';
@@ -48,7 +49,8 @@ async function main() {
   log.info(chatHandle.info, 'llm: chat model ready');
   const embedModel = createEmbeddingModel(loaded.config);
 
-  const store = new MemoryStore(path.resolve(agentDir, loaded.config.memory.vectorStorePath));
+  const storePath = assertInside(agentDir, loaded.config.memory.vectorStorePath);
+  const store = new MemoryStore(storePath);
   const bus = new EventEmitter();
 
   const runtime = new AgentRuntime({

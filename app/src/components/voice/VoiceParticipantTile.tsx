@@ -38,7 +38,7 @@ export default function VoiceParticipantTile({ participant, onKick }: Props) {
           className="absolute inset-0 rounded-full transition-all duration-150 pointer-events-none"
           style={{
             boxShadow: isSpeaking
-              ? `0 0 0 3px ${isAgent ? "var(--bf-accent)" : "var(--bf-green)"}`
+              ? "0 0 0 3px var(--bf-accent)"
               : "0 0 0 3px transparent",
             borderRadius: "50%",
           }}
@@ -90,7 +90,7 @@ export default function VoiceParticipantTile({ participant, onKick }: Props) {
         ) : (
           <Mic
             size={14}
-            style={{ color: isSpeaking ? "var(--bf-green)" : "var(--bf-symbol)" }}
+            style={{ color: isSpeaking ? "var(--bf-accent)" : "var(--bf-symbol)" }}
           />
         )}
       </div>

@@ -5,14 +5,14 @@ import { makeApp, jsonReq } from './helpers/app.js';
 import { registerAndLogin } from './helpers/auth.js';
 import { collections } from '../src/db/types.js';
 
-async function seedAgent(db: any, overrides: Partial<{ slug: string; name: string; visibility: 'public' | 'unlisted' }> = {}) {
+async function seedAgent(db: any, overrides: Partial<{ slug: string; name: string }> = {}) {
   const doc = {
     _id: new ObjectId(),
     name: overrides.name ?? 'Researcher',
     slug: overrides.slug ?? 'researcher',
     avatarUrl: null, description: 'finds papers', bio: null, tags: ['research'],
     baseUrl: 'http://agent.test:7777',
-    visibility: overrides.visibility ?? 'public',
+    visibility: 'public' as const,
     createdBy: new ObjectId(),
     createdAt: new Date(), updatedAt: new Date(),
   };

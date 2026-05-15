@@ -6,7 +6,7 @@
  * Scenarios covered:
  *   1. AgentMinted + matching reservation → AgentDoc inserted, reservation status → 'minted'
  *   2. AgentMinted with no matching reservation → no AgentDoc inserted, warning logged
- *   3. ModeChanged for an existing AgentDoc → mode field updated
+ *   3. ModeChanged → logged; AgentDoc unchanged
  *   4. Idempotency: second AgentMinted for the same tokenId → still only one AgentDoc
  */
 
@@ -125,7 +125,6 @@ function makeReservation(overrides: Partial<MintReservationDoc> = {}): MintReser
     bundleUri: 'mock://bundle/1',
     sealedDEKBaseUri: 'mock://dek/1',
     bundleHash: BUNDLE_HASH,
-    mode: 'public',
     status: 'uploaded',
     createdAt: new Date(),
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
@@ -246,7 +245,6 @@ describe('ChainIndexer — poll path', () => {
     expect(inserted!.slug).toBe('test-agent');
     // ethers checksums the address during ABI decode — compare case-insensitively.
     expect(inserted!.ownerWallet!.toLowerCase()).toBe(OWNER_ADDRESS.toLowerCase());
-    expect(inserted!.mode).toBe('public');
     expect(inserted!.bundleHash).toBe(BUNDLE_HASH);
     expect(inserted!.contractAddress).toBe(CONTRACT_ADDRESS);
 
@@ -291,11 +289,12 @@ describe('ChainIndexer — poll path', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Test 3: ModeChanged → mode updated on existing AgentDoc
+  // Test 3: ModeChanged → logged only (no AgentDoc mutation)
   // -------------------------------------------------------------------------
 
-  it('updates mode on existing AgentDoc when ModeChanged event fires', async () => {
-    // Pre-insert an AgentDoc in 'public' mode.
+  it('logs ModeChanged without mutating AgentDoc', async () => {
+    const infoSpy: MockInstance = vi.spyOn(log, 'info');
+
     const agentId = new ObjectId();
     const agentDoc: AgentDoc = {
       _id: agentId,
@@ -311,7 +310,6 @@ describe('ChainIndexer — poll path', () => {
       tokenId: '7',
       contractAddress: CONTRACT_ADDRESS,
       ownerWallet: OWNER_ADDRESS,
-      mode: 'public',
       manifestUri: 'mock://m',
       bundleUri: 'mock://b',
       sealedDEKBaseUri: 'mock://d',
@@ -322,7 +320,6 @@ describe('ChainIndexer — poll path', () => {
     };
     await tdb.db.collection<AgentDoc>(collections.agents).insertOne(agentDoc);
 
-    // Fire ModeChanged: tokenId=7, oldMode=0 (public), newMode=1 (permissioned).
     const modeChangedLog = encodeLog(
       iface,
       'ModeChanged',
@@ -336,8 +333,13 @@ describe('ChainIndexer — poll path', () => {
       .collection<AgentDoc>(collections.agents)
       .findOne({ tokenId: '7' });
 
-    expect(updated).not.toBeNull();
-    expect(updated!.mode).toBe('permissioned');
+    expect(updated!.updatedAt.getTime()).toBe(agentDoc.updatedAt.getTime());
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenStr: '7', newMode: 1 }),
+      expect.stringContaining('ModeChanged'),
+    );
+
+    infoSpy.mockRestore();
   });
 
   // -------------------------------------------------------------------------
@@ -389,17 +391,17 @@ describe('ChainIndexer — poll path', () => {
 
     expect(infoSpy).toHaveBeenCalledWith(
       expect.objectContaining({ tokenId: '11' }),
-      expect.stringContaining('authorization changed'),
+      expect.stringContaining('UsageAuthorized/Revoked'),
     );
 
     infoSpy.mockRestore();
   });
 
   // -------------------------------------------------------------------------
-  // Test 6: permissioned mode mint (mode=1)
+  // Test 6: AgentMinted with chain mode=1 (still indexed like mode=0 for app semantics)
   // -------------------------------------------------------------------------
 
-  it('stores mode as permissioned when AgentMinted fires with mode=1', async () => {
+  it('inserts AgentDoc when AgentMinted fires with on-chain mode=1', async () => {
     // Use a valid 32-byte (64 hex char) hash distinct from BUNDLE_HASH.
     const reservation = makeReservation({ bundleHash: '0x1111111111111111111111111111111111111111111111111111111111111111' });
     await tdb.db
@@ -421,6 +423,7 @@ describe('ChainIndexer — poll path', () => {
       .findOne({ tokenId: '77' });
 
     expect(inserted).not.toBeNull();
-    expect(inserted!.mode).toBe('permissioned');
+    expect(inserted!.slug).toBe('test-agent');
+    expect(inserted).not.toHaveProperty('mode');
   });
 });

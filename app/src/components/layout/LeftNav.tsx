@@ -1,18 +1,37 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Compass } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import WalletFundingModal from "@/components/server/WalletFundingModal";
 import type { BackendServerWallet, BackendServerFunding } from "@/lib/types";
 
-const SERVER_COLORS = ["#f97316","#6e86d6","#43b581","#f04747","#faa61a","#6633cc","#00d8ff","#ed1b24"];
+const SERVER_COLORS = ["#f97316", "var(--bf-fire)", "var(--bf-accent)", "#f04747", "#faa61a", "#6633cc", "#00d8ff", "#ed1b24"];
 
 interface FundingState {
   wallet: BackendServerWallet;
   funding: BackendServerFunding;
   serverName: string;
+}
+
+function SolidPlusIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="shrink-0" fill="currentColor">
+      <path d="M12 5a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2h-4v4a1 1 0 1 1-2 0v-4H7a1 1 0 1 1 0-2h4V6a1 1 0 0 1 1-1z" />
+    </svg>
+  );
+}
+
+function SolidCompassIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="shrink-0" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c3.87 0 7 3.13 7 7s-3.13 7-7 7-7-3.13-7-7 3.13-7 7-7z"
+      />
+      <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z" />
+    </svg>
+  );
 }
 
 export default function LeftNav() {
@@ -23,6 +42,12 @@ export default function LeftNav() {
   const [color, setColor] = useState(SERVER_COLORS[0]);
   const [desc, setDesc] = useState("");
   const [fundingState, setFundingState] = useState<FundingState | null>(null);
+
+  useEffect(() => {
+    const open = () => setShowModal(true);
+    window.addEventListener("bonfire:open-create-server", open);
+    return () => window.removeEventListener("bonfire:open-create-server", open);
+  }, []);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -81,21 +106,23 @@ export default function LeftNav() {
           />
         ))}
 
-        {/* Separator */}
-        <div className="w-8 border-b" style={{ borderColor: "var(--bf-quinary)" }} />
+        {/* Between server list and Add/Discover — skip when empty so we don’t stack two lines under the logo */}
+        {servers.length > 0 && (
+          <div className="w-8 border-b" style={{ borderColor: "var(--bf-quinary)" }} />
+        )}
 
         {/* Add server */}
         <NavPill
           title="Add a Server"
           onClick={() => setShowModal(true)}
-          accentColor="#43b581"
+          accentColor="var(--bf-accent)"
         >
-          <Plus size={24} strokeWidth={2} />
+          <SolidPlusIcon size={24} />
         </NavPill>
 
         {/* Discover */}
-        <NavPill title="Discover Servers" accentColor="#6e86d6" onClick={() => router.push("/marketplace")}>
-          <Compass size={22} strokeWidth={1.5} />
+        <NavPill title="Discover Servers" accentColor="var(--bf-fire)" onClick={() => router.push("/marketplace")}>
+          <SolidCompassIcon size={22} />
         </NavPill>
       </nav>
 
@@ -221,8 +248,14 @@ function ServerPill({
 
 function NavPill({
   children, title, onClick, accentColor,
+  iconColor = "var(--bf-primary)",
 }: {
-  children: React.ReactNode; title: string; onClick?: () => void; accentColor: string;
+  children: React.ReactNode;
+  title: string;
+  onClick?: () => void;
+  accentColor: string;
+  /** Stroke color for the icon (Lucide uses currentColor). */
+  iconColor?: string;
 }) {
   return (
     <div className="relative flex items-center flex-shrink-0 group" style={{ width: 72, height: 48 }}>
@@ -241,23 +274,13 @@ function NavPill({
       <button
         onClick={onClick}
         title={title}
-        className="mx-auto flex items-center justify-center transition-all duration-150 flex-shrink-0"
+        className="mx-auto flex items-center justify-center transition-all duration-150 flex-shrink-0 hover:ring-2 hover:ring-white/25"
         style={{
           width: 48,
           height: 48,
-          borderRadius: "50%",
-          background: "var(--bf-secondary)",
-          color: accentColor,
-        }}
-        onMouseEnter={e => {
-          (e.currentTarget as HTMLElement).style.background = accentColor;
-          (e.currentTarget as HTMLElement).style.color = "white";
-          (e.currentTarget as HTMLElement).style.borderRadius = "30%";
-        }}
-        onMouseLeave={e => {
-          (e.currentTarget as HTMLElement).style.background = "var(--bf-secondary)";
-          (e.currentTarget as HTMLElement).style.color = accentColor;
-          (e.currentTarget as HTMLElement).style.borderRadius = "50%";
+          borderRadius: "30%",
+          background: accentColor,
+          color: iconColor,
         }}
       >
         {children}

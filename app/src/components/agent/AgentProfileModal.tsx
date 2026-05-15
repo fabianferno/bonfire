@@ -6,7 +6,7 @@ import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
 
 const STATUS_COLOR: Record<string, string> = {
-  online:  "#57c98a",
+  online:  "var(--bf-accent)",
   busy:    "#f05b5b",
   idle:    "#fbbf24",
   offline: "#4b5563",
@@ -93,8 +93,8 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <code className="text-xs flex-1 truncate" style={{ color: "var(--bf-accent)" }}>{agent.teeHash}</code>
                 <button
-                  className="flex items-center gap-1 text-xs px-2 py-1 rounded font-semibold text-white flex-shrink-0"
-                  style={{ background: "var(--bf-green)" }}
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded font-semibold text-black flex-shrink-0"
+                  style={{ background: "var(--bf-accent)" }}
                   onClick={() => alert(`TEE Attestation:\n${agent.teeHash}\n\nVerified on 0G Compute Network`)}
                 >
                   <ShieldCheck size={12} strokeWidth={2} />
@@ -202,7 +202,7 @@ function LogRow({ log }: { log: AgentLog }) {
           {log.toolOutput && (
             <div>
               <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>Output</p>
-              <pre className="text-xs rounded p-2 overflow-x-auto" style={{ background: "var(--bf-tertiary)", color: "#57c98a" }}>
+              <pre className="text-xs rounded p-2 overflow-x-auto" style={{ background: "var(--bf-tertiary)", color: "var(--bf-fire)" }}>
                 {JSON.stringify(JSON.parse(log.toolOutput), null, 2)}
               </pre>
             </div>

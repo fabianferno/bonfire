@@ -52,7 +52,7 @@ export const EvolutionSchema = z.object({
 export const MemorySchema = z.object({
   maxSessions: z.number().default(100),
   compactAfterTokens: z.number().default(8000),
-  vectorStorePath: z.string().default('./memory/vectors.db'),
+  vectorStorePath: z.string().default('./memory/store.json'),
 });
 
 export const BuiltinToolsSchema = z.object({

@@ -3,23 +3,31 @@
 @tailwind utilities;
 
 :root {
-  /* High-contrast dark — deeper blacks, crisper whites */
-  --bf-primary:    #1e2124;
-  --bf-secondary:  #282b30;
-  --bf-tertiary:   #111214;
-  --bf-quaternary: #1a1c1f;
-  --bf-quinary:    #313438;
-  --bf-white:      #f2f3f5;
-  --bf-gray:       #a0a3a8;
-  --bf-symbol:     #6d7178;
-  --bf-senary:     #8e9197;
-  --bf-accent:     #7c9cf5;
-  --bf-fire:       #fb923c;
-  --bf-green:      #57c98a;
-  --bf-yellow:     #fbbf24;
+  /* Brand palette */
+  --bf-blanche:    #FEFFFC; /* Blanche White */
+  --bf-banana:     #D0FF00; /* Banana Yellow — primary brand */
+  --bf-plum:       #8116E0; /* Plum Violet — secondary brand */
+
+  /* High-contrast dark surfaces — pure black, Discord-like */
+  --bf-tertiary:   #000000; /* app body bg */
+  --bf-primary:    #060606; /* sidebar / nav */
+  --bf-quaternary: #0a0a0a; /* panel */
+  --bf-secondary:  #0f0f0f; /* raised surface */
+  --bf-quinary:    #181818; /* hover / divider hover */
+
+  --bf-white:      #FEFFFC;
+  --bf-gray:       #b3b5b8;
+  --bf-symbol:     #7a7d82;
+  --bf-senary:     #9a9da2;
+
+  /* Semantic accents — themed to brand */
+  --bf-accent:     #D0FF00; /* primary actions, highlights */
+  --bf-fire:       #8116E0; /* secondary accent / agent vibe */
+  --bf-yellow:     #D0FF00;
   --bf-red:        #f05b5b;
-  --bf-chat-input: rgb(48,52,57);
-  --bf-border:     rgba(255,255,255,0.06);
+
+  --bf-chat-input: #0f0f0f;
+  --bf-border:     rgba(255,255,255,0.08);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

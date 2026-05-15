@@ -25,7 +25,6 @@ export interface CreateAgentInput {
   bio?: string | null;
   avatarUrl?: string | null;
   tags?: string[];
-  visibility: 'public' | 'unlisted';
   createdBy: ObjectId;
   /** NOT persisted — proxied to the agent server's /tenants before MongoDB insert. */
   soul?: string;
@@ -49,7 +48,7 @@ export async function createAgent(db: Db, input: CreateAgentInput): Promise<{ ag
     bio: input.bio ?? null,
     tags: input.tags ?? [],
     baseUrl: input.baseUrl,
-    visibility: input.visibility,
+    visibility: 'public',
     agentKeyHash: hash,
     createdBy: input.createdBy,
     createdAt: now,
@@ -72,7 +71,7 @@ export async function findAgentByIdOrSlug(db: Db, idOrSlug: string): Promise<Age
 }
 
 export async function listPublicAgents(db: Db, opts: { q?: string; tag?: string; limit?: number; cursor?: string }): Promise<AgentDoc[]> {
-  const filter: Record<string, unknown> = { visibility: 'public' };
+  const filter: Record<string, unknown> = {};
   if (opts.tag) filter.tags = opts.tag;
   if (opts.q) filter.name = { $regex: opts.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
   const cursor = db.collection<AgentDoc>(collections.agents).find(filter);
@@ -109,7 +108,6 @@ export function publicAgent(a: AgentDoc) {
     bio: a.bio,
     tags: a.tags,
     baseUrl: a.baseUrl,
-    visibility: a.visibility,
     createdBy: a.createdBy ? a.createdBy.toHexString() : null,
     createdAt: a.createdAt.toISOString(),
   };

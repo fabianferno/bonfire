@@ -99,7 +99,6 @@ export const bf = {
     bio?: string;
     avatarUrl?: string | null;
     tags?: string[];
-    visibility?: 'public' | 'unlisted';
     env?: Record<string, string>;
     llm?: {
       provider?: 'openai-compatible' | 'zerog';

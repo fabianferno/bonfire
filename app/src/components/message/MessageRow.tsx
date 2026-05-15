@@ -44,7 +44,7 @@ function ToolCallThread({ content }: { content: string }) {
                 className="px-3 py-2 text-xs font-mono"
                 style={{
                   background: i % 2 === 0 ? "var(--bf-quaternary)" : "var(--bf-tertiary)",
-                  color: isOutput ? "#57c98a" : isInput ? "var(--bf-accent)" : "var(--bf-gray)",
+                  color: isOutput ? "var(--bf-fire)" : isInput ? "var(--bf-accent)" : "var(--bf-gray)",
                   borderTop: i > 0 ? "1px solid var(--bf-quinary)" : "none",
                 }}
               >
@@ -106,7 +106,7 @@ export default function MessageRow({ msg }: { msg: Message }) {
             <button
               onClick={() => setShowVerify(!showVerify)}
               className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md"
-              style={{ color: "var(--bf-green)", background: "rgba(87,201,138,0.12)" }}
+              style={{ color: "var(--bf-accent)", background: "rgba(208,255,0,0.12)" }}
             >
               <ShieldCheck size={12} strokeWidth={2} />
               TEE Verified
@@ -123,12 +123,12 @@ export default function MessageRow({ msg }: { msg: Message }) {
         {showVerify && msg.teeHash && (
           <div className="mt-2 rounded-lg p-2.5 text-xs font-mono" style={{ background: "var(--bf-quaternary)", color: "var(--bf-gray)" }}>
             <p className="font-semibold text-white mb-1 flex items-center gap-1.5">
-              <ShieldAlert size={13} strokeWidth={2} style={{ color: "var(--bf-green)" }} />
+              <ShieldAlert size={13} strokeWidth={2} style={{ color: "var(--bf-accent)" }} />
               TEE Attestation Report
             </p>
             <p>Hash: <span style={{ color: "var(--bf-accent)" }}>{msg.teeHash}</span></p>
             <p>Provider: 0G Compute Network · Intel TDX + NVIDIA H100</p>
-            <p>Status: <span style={{ color: "var(--bf-green)" }}>Verified</span></p>
+            <p>Status: <span style={{ color: "var(--bf-accent)" }}>Verified</span></p>
           </div>
         )}
       </div>

@@ -10,11 +10,13 @@ interface ModalProps {
   confirmDisabled?: boolean;
   children: React.ReactNode;
   wide?: boolean;
+  /** Larger than `wide` — for dense forms (e.g. Create Agent). */
+  extraWide?: boolean;
   steps?: { total: number; current: number };
   maxHeight?: string;
 }
 
-export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabel = "Confirm", confirmDisabled, children, wide, steps, maxHeight }: ModalProps) {
+export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabel = "Confirm", confirmDisabled, children, wide, extraWide, steps, maxHeight }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
@@ -28,7 +30,9 @@ export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabe
       onClick={onClose}
     >
       <div
-        className={`rounded-lg p-6 flex flex-col gap-4 ${wide ? "w-[600px]" : "w-[440px]"} max-w-[95vw]`}
+        className={`rounded-lg p-6 flex flex-col gap-4 max-w-[95vw] ${
+          extraWide ? "w-[min(880px,95vw)]" : wide ? "w-[600px]" : "w-[440px]"
+        }`}
         style={{ background: "var(--bf-primary)" }}
         onClick={e => e.stopPropagation()}
       >
@@ -45,21 +49,24 @@ export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabe
             </div>
           )}
           <h2 className="text-white text-xl font-bold">{title}</h2>
-          {subtitle && <p className="text-sm mt-1" style={{ color: "var(--bf-gray)" }}>{subtitle}</p>}
+          {subtitle && <p className="text-sm mt-2.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{subtitle}</p>}
         </div>
-        <div style={maxHeight ? { overflowY: "auto", maxHeight } : undefined}>
+        <div
+          className="flex flex-col gap-4"
+          style={maxHeight ? { overflowY: "auto", maxHeight } : undefined}
+        >
           {children}
         </div>
         {onConfirm && (
-          <div className="flex justify-end gap-3 mt-2">
+          <div className="flex justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-white text-sm rounded hover:underline">
               Cancel
             </button>
             <button
               onClick={onConfirm}
               disabled={confirmDisabled}
-              className="px-5 py-2 text-white text-sm font-semibold rounded disabled:opacity-40 disabled:cursor-default"
-              style={{ background: "var(--bf-accent)" }}
+              className="px-5 py-2 text-sm font-semibold rounded disabled:opacity-40 disabled:cursor-default"
+              style={{ background: "var(--bf-accent)", color: "var(--bf-primary)" }}
             >
               {confirmLabel}
             </button>

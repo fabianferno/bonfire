@@ -5,7 +5,7 @@ import Avatar from "@/components/shared/Avatar";
 import AgentProfileModal from "./AgentProfileModal";
 
 const STATUS_COLOR: Record<string, string> = {
-  online:  "#57c98a",
+  online:  "var(--bf-accent)",
   busy:    "#f05b5b",
   idle:    "#fbbf24",
   offline: "#4b5563",

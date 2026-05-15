@@ -72,13 +72,26 @@ export function useMintAgent() {
 
     // chainId hint ensures Privy prompts the user to switch to 0G testnet if
     // their embedded wallet is currently configured for a different network.
-    const result = await sendTransaction({
-      to: contractAddress,
-      data,
-      chainId: OG_TESTNET_CHAIN_ID,
-    });
-
-    return { txHash: result.hash };
+    try {
+      const result = await sendTransaction({
+        to: contractAddress,
+        data,
+        chainId: OG_TESTNET_CHAIN_ID,
+      });
+      return { txHash: result.hash };
+    } catch (err) {
+      // Privy's sendTransaction internally calls viem's waitForTransactionReceipt
+      // which can time out on 0G testnet's slow finalization even when the tx
+      // was submitted successfully. The thrown error embeds the hash — recover
+      // it and let the backend's /mint/confirm + chain indexer do the real
+      // verification.
+      const msg = err instanceof Error ? err.message : String(err);
+      const hashMatch = msg.match(/0x[a-fA-F0-9]{64}/);
+      if (hashMatch && /receipt|not be found|not be processed/i.test(msg)) {
+        return { txHash: hashMatch[0] as `0x${string}` };
+      }
+      throw err;
+    }
   }
 
   return { mint };

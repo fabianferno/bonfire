@@ -14,6 +14,7 @@ import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
 import StatusBar from '@/components/layout/StatusBar';
 import DmSidebar, { upsertDmSession } from '@/components/dm/DmSidebar';
+import Avatar from 'boring-avatars';
 
 const CATEGORY_COLOR: Record<string, string> = {
   Research: '#8116E0',
@@ -23,17 +24,28 @@ const CATEGORY_COLOR: Record<string, string> = {
   Generalist: '#8116E0',
 };
 
-const TAG_BANNER: Record<string, string> = {
-  research: 'linear-gradient(135deg,#0a0014 0%,#2a0060 60%,#8116E0 100%)',
-  code: 'linear-gradient(135deg,#0a0014 0%,#1b3a1b 60%,#43b581 100%)',
-  finance: 'linear-gradient(135deg,#0a0014 0%,#2a0060 60%,#8116E0 100%)',
-  voice: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
-  generalist: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
-};
+/** Marble variant + “Pop” palette (boringavatars.com presets). */
+const MARBLE_POP_COLORS = ['#ffad08', '#edd75a', '#73b06f', '#0c8f8f', '#405059'];
 
-function agentBanner(a: BackendAgent) {
-  const tag = a.tags[0]?.toLowerCase() ?? '';
-  return TAG_BANNER[tag] ?? 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)';
+function agentBannerSeed(agent: BackendAgent) {
+  return agent.slug || agent.id || agent.name;
+}
+
+function MarketplaceAgentCardBanner({ agent }: { agent: BackendAgent }) {
+  return (
+    <div className="absolute inset-0 z-0 overflow-hidden">
+      <Avatar
+        name={agentBannerSeed(agent)}
+        variant="marble"
+        colors={MARBLE_POP_COLORS}
+        square
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid slice"
+        style={{ display: 'block' }}
+      />
+    </div>
+  );
 }
 // ── Detail overlay ────────────────────────────────────────────────────────────
 
@@ -48,8 +60,6 @@ function AgentDetailOverlay({
   onInvite: (a: BackendAgent) => void;
   onMessage: (a: BackendAgent) => void;
 }) {
-  const banner = agentBanner(agent);
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
@@ -61,11 +71,12 @@ function AgentDetailOverlay({
         style={{ background: 'var(--bf-secondary)', maxHeight: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Banner */}
-        <div className="relative h-44 flex-shrink-0" style={{ background: banner }}>
+        {/* Banner — z-10 so avatar (translate-y-1/2) paints above the body below */}
+        <div className="relative z-10 h-44 flex-shrink-0">
+          <MarketplaceAgentCardBanner agent={agent} />
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+            className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full flex items-center justify-center"
             style={{ background: 'rgba(0,0,0,0.4)', color: 'white' }}
           >
             <X size={16} />
@@ -73,7 +84,7 @@ function AgentDetailOverlay({
           <img
             src={agentAvatarDisplayUrl(agent)}
             alt=""
-            className="absolute bottom-0 left-6 translate-y-1/2 w-20 h-20 rounded-2xl border-4 object-cover bg-[var(--bf-quaternary)]"
+            className="absolute bottom-0 left-6 z-10 translate-y-1/2 w-20 h-20 rounded-2xl border-4 object-cover bg-[var(--bf-quaternary)]"
             style={{ borderColor: 'var(--bf-secondary)' }}
           />
         </div>
@@ -363,11 +374,12 @@ function MarketplaceInner() {
                             style={{ background: 'var(--bf-secondary)' }}
                             onClick={() => setDetailAgent(agent)}
                           >
-                            <div className="h-32 relative" style={{ background: agentBanner(agent) }}>
+                            <div className="relative z-10 h-32">
+                              <MarketplaceAgentCardBanner agent={agent} />
                               <img
                                 src={agentAvatarDisplayUrl(agent)}
                                 alt=""
-                                className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover bg-[var(--bf-quaternary)]"
+                                className="absolute bottom-0 left-4 z-10 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover bg-[var(--bf-quaternary)]"
                                 style={{ borderColor: 'var(--bf-secondary)' }}
                               />
                             </div>
@@ -434,11 +446,12 @@ function MarketplaceInner() {
                             onClick={() => setDetailAgent(agent)}
                           >
                             {/* Mini banner */}
-                            <div className="h-16 relative" style={{ background: agentBanner(agent) }}>
+                            <div className="relative z-10 h-16">
+                              <MarketplaceAgentCardBanner agent={agent} />
                               <img
                                 src={agentAvatarDisplayUrl(agent)}
                                 alt=""
-                                className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover bg-[var(--bf-quaternary)]"
+                                className="absolute bottom-0 left-3 z-10 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover bg-[var(--bf-quaternary)]"
                                 style={{ borderColor: 'var(--bf-secondary)' }}
                               />
                             </div>

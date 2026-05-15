@@ -101,7 +101,7 @@ function EmptyState({ onBrowse, hasServer }: { onBrowse: () => void; hasServer: 
         <>
           <button
             onClick={onBrowse}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-bold text-black transition-opacity hover:opacity-90"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-bold text-white transition-opacity hover:opacity-90"
             style={{ background: "var(--bf-accent)", fontSize: 13 }}
           >
             <UserPlus size={14} strokeWidth={2.5} />

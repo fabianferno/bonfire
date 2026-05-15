@@ -113,8 +113,8 @@ export default function LeftNav() {
             BonFire
           </div>
           <button
-            onClick={() => router.push("/")}
-            title="BonFire"
+            onClick={() => router.push("/marketplace")}
+            title="BonFire Marketplace"
             className="mx-auto flex bg-lime-950 items-center justify-center transition-all duration-150 overflow-hidden text-[1.75rem] leading-none select-none"
             style={{ width: 48, height: 48, borderRadius: "30%" }}
           >

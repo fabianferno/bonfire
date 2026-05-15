@@ -156,7 +156,7 @@ export default function WalletPanel({ serverId }: Props) {
         <button
           onClick={() => setAction('topup')}
           className="flex-1 px-2 py-1 rounded text-xs font-semibold"
-          style={{ background: 'var(--bf-accent)', color: 'var(--bf-primary)' }}
+          style={{ background: 'var(--bf-accent)', color: 'white' }}
         >
           Top Up
         </button>

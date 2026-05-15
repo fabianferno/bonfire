@@ -576,17 +576,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .slice(0, 32) || `server-${Date.now()}`;
       try {
         const result = await bf.createServer({ name, slug });
+        // Eagerly fetch the server's channel list so that the auto-created
+        // text + voice + audit channels are visible immediately, without
+        // waiting for the `activeServerId` useEffect to re-fetch.
+        let initialChannels: Channel[] = [];
+        try {
+          const { channels: rawCh } = await bf.getChannels(result.server.id);
+          initialChannels = rawCh.map(mapChannel);
+        } catch {
+          // Soft-fail — the useEffect-driven loader will retry.
+        }
         const newServer: Server = {
           ...mapServer(result.server),
           color: _color,
           description: _description,
-          channels: [],
+          channels: initialChannels,
           agents: [],
           members: [],
         };
         setServers((prev) => [...prev, newServer]);
         setActiveServerId(result.server.id);
-        setActiveChannelId("");
+        // Select the first text channel if any.
+        const firstText = initialChannels.find((c) => c.type === "text");
+        setActiveChannelId(firstText?.id ?? "");
         return { server: newServer, wallet: result.wallet, funding: result.funding };
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create server");

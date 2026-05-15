@@ -3,6 +3,7 @@ packages:
 
 allowBuilds:
   argon2: true
+  blake-hash: false
   bufferutil: true
   es5-ext: true
   esbuild: true

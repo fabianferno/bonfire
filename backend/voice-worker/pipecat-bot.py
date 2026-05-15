@@ -45,8 +45,24 @@ async def main() -> None:
         os.environ.get("AGENT_SOUL", "").strip()
         or "You are a helpful voice assistant. Keep replies concise and friendly."
     )
+    agent_rules = os.environ.get("AGENT_AGENTS", "").strip()  # operating rules from AGENTS.md
     agent_name = os.environ.get("AGENT_NAME", "Ember")
     agent_slug = os.environ.get("AGENT_SLUG", "")
+
+    # Compose the system prompt the same shape ember-agent's prompt-builder uses:
+    #   <soul>…</soul>
+    #   <operating_rules>…</operating_rules>
+    #   + a one-liner reminder this is voice (keep replies short for TTS).
+    system_prompt_parts = [
+        f"<soul>\n{agent_soul}\n</soul>",
+    ]
+    if agent_rules:
+        system_prompt_parts.append(f"<operating_rules>\n{agent_rules}\n</operating_rules>")
+    system_prompt_parts.append(
+        "[Voice context] You are in a live voice conversation. Keep replies SHORT (1-3 sentences). "
+        "No markdown, no code blocks — your words will be spoken aloud."
+    )
+    system_prompt = "\n\n".join(system_prompt_parts)
     tts_voice = os.environ.get("OPENAI_TTS_VOICE", "nova")
     tts_model = os.environ.get("OPENAI_TTS_MODEL", "tts-1")
 
@@ -73,6 +89,9 @@ async def main() -> None:
         DailyParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
+            # Audio-only — never publish or subscribe to video.
+            camera_in_enabled=False,
+            camera_out_enabled=False,
             transcription_enabled=False,
             vad_analyzer=SileroVADAnalyzer(),
         ),
@@ -95,7 +114,7 @@ async def main() -> None:
     # System prompt + initial assistant greeting
     greeting = f"Hi, I'm {agent_name}. Let's talk!"
     messages = [
-        {"role": "system", "content": agent_soul},
+        {"role": "system", "content": system_prompt},
         {"role": "assistant", "content": greeting},
     ]
     context = LLMContext(messages=messages)
@@ -115,7 +134,7 @@ async def main() -> None:
 
     task = PipelineTask(
         pipeline,
-        PipelineParams(allow_interruptions=True),
+        params=PipelineParams(allow_interruptions=True),
     )
 
     @transport.event_handler("on_first_participant_joined")

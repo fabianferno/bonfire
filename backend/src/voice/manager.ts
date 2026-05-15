@@ -18,6 +18,7 @@ import type { OgStorageClient } from '../storage-0g/index.js';
 import type { ChannelDoc, UserDoc, VoiceSessionDoc, AgentDoc, VoiceBotEntry } from '../db/types.js';
 import { collections } from '../db/types.js';
 import { decryptAgentBundle } from '../agents/inft-decrypt.js';
+import { writeAudit } from '../audit/log.js';
 import { log } from '../util/logger.js';
 
 export interface VoiceManagerDeps {
@@ -109,6 +110,16 @@ export class VoiceManager {
       });
 
       const session = (await col.findOne({ _id: existing._id }))!;
+      await writeAudit(this.db, {
+        serverId: channel.serverId,
+        channelId: channel._id,
+        actorType: 'user',
+        actorId: user._id,
+        agentId: null,
+        agentSlug: null,
+        action: 'voice_join',
+        payload: { sessionId: session._id.toHexString(), reused: true },
+      });
       return { session, userToken };
     }
 
@@ -141,6 +152,21 @@ export class VoiceManager {
       expSeconds: 600,
     });
 
+    await writeAudit(this.db, {
+      serverId: channel.serverId,
+      channelId: channel._id,
+      actorType: 'user',
+      actorId: user._id,
+      agentId: null,
+      agentSlug: null,
+      action: 'voice_join',
+      payload: {
+        sessionId: sessionDoc._id.toHexString(),
+        reused: false,
+        roomName: room.name,
+      },
+    });
+
     return { session: sessionDoc, userToken };
   }
 
@@ -170,8 +196,10 @@ export class VoiceManager {
       throw new AgentAlreadyInvitedError(`agent ${agent.slug} is already in this session`);
     }
 
-    // Decrypt agent bundle to get its SOUL. Skip if no INFT backing.
+    // Decrypt agent bundle to get its SOUL and operating rules (AGENTS.md).
+    // Both feed the voice bot's system prompt — same shape as text chat.
     let agentSoul = '';
+    let agentRules = '';
     if (agent.tokenId && this.storage && this.platformExecutorPrivkey) {
       try {
         const bundle = await decryptAgentBundle({
@@ -180,8 +208,9 @@ export class VoiceManager {
           platformExecutorPrivkey: this.platformExecutorPrivkey,
         });
         agentSoul = bundle.soul ?? '';
+        agentRules = bundle.agents ?? '';
       } catch (e) {
-        log.warn({ agentSlug: agent.slug, err: e }, 'failed to decrypt agent bundle; using empty soul');
+        log.warn({ agentSlug: agent.slug, err: e }, 'failed to decrypt agent bundle; using empty soul/rules');
       }
     }
 
@@ -200,6 +229,7 @@ export class VoiceManager {
       DAILY_ROOM_URL: session.dailyRoomUrl,
       DAILY_BOT_TOKEN: botToken,
       AGENT_SOUL: agentSoul,
+      AGENT_AGENTS: agentRules,
       AGENT_SLUG: agent.slug,
       AGENT_NAME: agent.name,
       OG_LLM_BASE_URL: process.env.OG_LLM_BASE_URL ?? '',
@@ -242,6 +272,20 @@ export class VoiceManager {
       'invited agent bot spawned',
     );
 
+    await writeAudit(this.db, {
+      serverId: session.serverId,
+      channelId: session.channelId,
+      actorType: 'user',
+      actorId: invitedBy._id,
+      agentId: agent._id,
+      agentSlug: agent.slug,
+      action: 'voice_agent_invited',
+      payload: {
+        sessionId: session._id.toHexString(),
+        pid: spawned.pid,
+      },
+    });
+
     return { bot: botEntry };
   }
 
@@ -280,6 +324,18 @@ export class VoiceManager {
     );
 
     log.info({ sessionId: session._id.toHexString(), agentSlug }, 'agent bot kicked');
+
+    await writeAudit(this.db, {
+      serverId: session.serverId,
+      channelId: session.channelId,
+      actorType: 'user',
+      actorId: opts.requestedBy._id,
+      agentId: target.agentDocId,
+      agentSlug,
+      action: 'voice_agent_kicked',
+      payload: { sessionId: session._id.toHexString() },
+    });
+
     return { removed: true };
   }
 
@@ -320,9 +376,37 @@ export class VoiceManager {
         }
       }
       await this._teardown(session);
+      await writeAudit(this.db, {
+        serverId: session.serverId,
+        channelId: session.channelId,
+        actorType: 'user',
+        actorId: user._id,
+        agentId: null,
+        agentSlug: null,
+        action: 'voice_leave',
+        payload: {
+          sessionId: session._id.toHexString(),
+          ended: true,
+          botsKilled: bots.length,
+        },
+      });
       return { ended: true };
     }
 
+    await writeAudit(this.db, {
+      serverId: session.serverId,
+      channelId: session.channelId,
+      actorType: 'user',
+      actorId: user._id,
+      agentId: null,
+      agentSlug: null,
+      action: 'voice_leave',
+      payload: {
+        sessionId: session._id.toHexString(),
+        ended: false,
+        remainingParticipants: session.participantIds.length,
+      },
+    });
     return { ended: false };
   }
 

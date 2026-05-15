@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Headphones, HeadphoneOff, Mic, MicOff, PhoneOff, UserPlus, X } from "lucide-react";
 import type { DailyCall } from "@daily-co/daily-js";
-import { DailyProvider } from "@daily-co/daily-react";
+import { DailyProvider, DailyAudio } from "@daily-co/daily-react";
 import { voiceApi, type VoiceSession, type VoiceBot } from "@/lib/voice";
 import VoiceParticipantTile from "./VoiceParticipantTile";
 import { useVoiceCall } from "./useVoiceCall";
@@ -111,6 +111,10 @@ function VoiceRoomInner({
 
   return (
     <>
+    {/* DailyAudio renders <audio> elements for every remote participant so we
+        can actually HEAR them. Without this, daily-react never plays remote
+        audio (it doesn't auto-play remote tracks). Position absolutely off-screen. */}
+    <DailyAudio />
     <div
       className="fixed inset-0 z-50 flex flex-col"
       style={{ background: "rgba(17,18,20,0.97)" }}

@@ -11,6 +11,7 @@ import { internalRoutes } from './routes/internal.js';
 import { cascadeRoutes } from './routes/cascade.js';
 import { voiceRoutes } from './routes/voice.js';
 import { auditRoutes } from './routes/audit.js';
+import { registerOgLlmProxy } from '../voice/og-llm-proxy.js';
 import type { InftDeps } from '../agents/invoker.js';
 import type { VoiceManager } from '../voice/manager.js';
 
@@ -83,6 +84,9 @@ export function buildApp(deps: AppDeps) {
   app.route('/', auditRoutes({ db: deps.db, jwtSecret: deps.jwtSecret }));
   if (deps.voiceManager) {
     app.route('/', voiceRoutes({ db: deps.db, jwtSecret: deps.jwtSecret, voiceManager: deps.voiceManager }));
+    // OpenAI-shaped proxy that signs requests through 0G Compute. Used by the
+    // Pipecat voice bot so it can do LLM via 0G the same way the text chat does.
+    registerOgLlmProxy(app);
   }
   return app;
 }

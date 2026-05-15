@@ -65,7 +65,14 @@ export function useVoiceCall(opts: {
     queueMicrotask(() => setJoinState("joining"));
 
     callObject
-      .join({ url: opts.roomUrl, token: opts.token })
+      .join({
+        url: opts.roomUrl,
+        token: opts.token,
+        // Audio-only — never request the camera; never publish video.
+        videoSource: false,
+        audioSource: true,
+        subscribeToTracksAutomatically: true,
+      })
       .catch((err: unknown) => {
         if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
         setJoinState("error");

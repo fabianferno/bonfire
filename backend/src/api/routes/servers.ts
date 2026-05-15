@@ -241,39 +241,58 @@ export function serverRoutes(deps: ServerRouteDeps) {
       // Require an ownerWallet
       if (!agent.ownerWallet) return c.json({ error: 'agent_has_no_owner_wallet' }, 400);
 
-      // Check the txHash hasn't been used for another invite
-      const usedTx = await deps.db.collection(collections.serverMembers).findOne({ paidTxHash: paymentTxHash });
-      if (usedTx) return c.json({ error: 'payment_already_used' }, 409);
+      // Require the authenticated user to have a wallet (for the from-check).
+      const buyer = c.get('user');
+      if (!buyer.walletAddress) return c.json({ error: 'user_has_no_wallet' }, 400);
 
-      // Verify the payment on-chain
+      // Verify the payment on-chain. The from-check rejects replays of any
+      // historical transfer to ownerWallet that the buyer didn't actually send.
       try {
         await verifyAgentInvitePayment({
           txHash: paymentTxHash,
+          expectedFrom: buyer.walletAddress,
           toAddress: agent.ownerWallet,
           expectedOgAmount: priceOg,
         });
       } catch (e) {
         if (e instanceof PaymentVerificationError) {
           log.warn({ txHash: paymentTxHash, code: e.code, agentSlug }, 'agent invite payment verification failed');
+          // Map insufficient_confirmations to 425 (Too Early) so the frontend
+          // can retry after a short backoff instead of treating it as fatal.
+          if (e.code === 'insufficient_confirmations') {
+            return c.json({ error: 'insufficient_confirmations', message: e.message }, 425);
+          }
           return c.json({ error: 'payment_invalid', code: e.code, message: e.message }, 400);
         }
         throw e;
       }
     }
 
-    // 4. Add the agent as a member
-    const member = await addMember(deps.db, {
-      serverId: c.get('server')._id,
-      principalType: 'agent',
-      principalId: agent._id,
-      role: 'member',
-      alias: null,
-      ...(isPaid && paymentTxHash ? {
-        paidTxHash: paymentTxHash,
-        paidAmount: priceOg,
-        paidByUserId: c.get('user')._id,
-      } : {}),
-    });
+    // 4. Add the agent as a member. The uniqueness on serverMembers.paidTxHash
+    // (sparse) is the authoritative replay guard — it eliminates the
+    // TOCTOU window a pre-check would have. On collision Mongo raises
+    // 11000; we translate to 409 payment_already_used.
+    let member;
+    try {
+      member = await addMember(deps.db, {
+        serverId: c.get('server')._id,
+        principalType: 'agent',
+        principalId: agent._id,
+        role: 'member',
+        alias: null,
+        ...(isPaid && paymentTxHash ? {
+          paidTxHash: paymentTxHash,
+          paidAmount: priceOg,
+          paidByUserId: c.get('user')._id,
+        } : {}),
+      });
+    } catch (e) {
+      const err = e as { code?: number; keyPattern?: Record<string, unknown> };
+      if (err.code === 11000 && err.keyPattern && 'paidTxHash' in err.keyPattern) {
+        return c.json({ error: 'payment_already_used' }, 409);
+      }
+      throw e;
+    }
 
     return c.json({ member: publicMember(member) }, 201);
   });

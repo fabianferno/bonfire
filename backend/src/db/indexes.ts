@@ -26,6 +26,11 @@ export async function createIndexes(db: Db): Promise<void> {
   await db.collection(collections.serverMembers).createIndexes([
     { key: { serverId: 1, principalType: 1, principalId: 1 }, name: 'serverId_1_principalType_1_principalId_1', unique: true },
     { key: { principalId: 1, principalType: 1 }, name: 'principalId_1_principalType_1' },
+    // Replay guard for paid invites — the unique constraint is the actual
+    // gate; the route relies on the resulting E11000 to detect duplicates
+    // (avoids the TOCTOU window a findOne pre-check would leave open).
+    // Sparse — only paid invites have this field set.
+    { key: { paidTxHash: 1 }, name: 'paidTxHash_1', unique: true, sparse: true },
   ]);
 
   await db.collection(collections.channels).createIndexes([

@@ -12,7 +12,7 @@
  */
 
 import { useSendTransaction } from '@privy-io/react-auth';
-import { encodeFunctionData } from 'viem';
+import { encodeFunctionData, parseEther } from 'viem';
 import { BonFireAgentINFTAbi } from './abi/BonFireAgentINFT';
 
 /** The 0G testnet chain ID. Passed as a hint to Privy's sendTransaction so the
@@ -111,21 +111,49 @@ export function useSendOgPayment() {
   const { sendTransaction } = useSendTransaction();
 
   async function payAndGetTxHash(toAddress: string, amountOg: string): Promise<string> {
-    // Convert OG decimal string (e.g. "0.5") to wei (18 decimals)
-    const parts = amountOg.split('.');
-    const whole = BigInt(parts[0] ?? '0');
-    const decimals = (parts[1] ?? '').padEnd(18, '0').slice(0, 18);
-    const valueWei = whole * BigInt('1000000000000000000') + BigInt(decimals);
+    // Validate inputs early — Privy's modal silently closes on malformed args.
+    if (!/^0x[a-fA-F0-9]{40}$/.test(toAddress)) {
+      throw new Error(`invalid recipient address: ${toAddress}`);
+    }
+    // viem.parseEther accepts the same numeric strings the backend's regex
+    // (^\d+(\.\d+)?$) does AND rejects scientific notation / multi-dot input.
+    // It also keeps full 18-decimal precision, avoiding the silent truncation
+    // the previous manual padEnd/slice path caused for >18 decimal digits.
+    let valueWei: bigint;
+    try {
+      valueWei = parseEther(amountOg as `${number}`);
+    } catch (e) {
+      throw new Error(`invalid amount: ${amountOg}: ${(e as Error).message}`);
+    }
+    if (valueWei <= BigInt(0)) {
+      throw new Error(`amount must be > 0; got ${amountOg}`);
+    }
+    // Privy's sendTransaction prefers a 0x-prefixed hex string for `value` —
+    // raw BigInts cause the modal to validate-fail and auto-close on some
+    // @privy-io/react-auth versions, leaving the page-blur stuck.
+    const valueHex = `0x${valueWei.toString(16)}` as const;
+
+    // eslint-disable-next-line no-console
+    console.info('[og-payment] sending', {
+      to: toAddress,
+      valueHex,
+      amountOg,
+      chainId: OG_TESTNET_CHAIN_ID,
+    });
 
     try {
       const result = await sendTransaction({
-        to: toAddress,
-        value: valueWei,
+        to: toAddress as `0x${string}`,
+        value: valueHex,
         chainId: OG_TESTNET_CHAIN_ID,
       });
+      // eslint-disable-next-line no-console
+      console.info('[og-payment] confirmed', result.hash);
       return result.hash;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.error('[og-payment] failed', msg);
       const hashMatch = msg.match(/0x[a-fA-F0-9]{64}/);
       if (hashMatch && /receipt|not be found|not be processed/i.test(msg)) {
         return hashMatch[0];

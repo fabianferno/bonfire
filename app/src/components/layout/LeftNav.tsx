@@ -115,13 +115,13 @@ export default function LeftNav() {
         <NavPill
           title="Add a Server"
           onClick={() => setShowModal(true)}
-          accentColor="var(--bf-accent)"
+          accentColor="var(--bf-nav-pill-gradient)"
         >
           <SolidPlusIcon size={24} />
         </NavPill>
 
         {/* Discover */}
-        <NavPill title="Discover Servers" accentColor="var(--bf-fire)" onClick={() => router.push("/marketplace")}>
+        <NavPill title="Discover Servers" accentColor="var(--bf-nav-pill-gradient)" onClick={() => router.push("/marketplace")}>
           <SolidCompassIcon size={22} />
         </NavPill>
       </nav>
@@ -248,13 +248,13 @@ function ServerPill({
 
 function NavPill({
   children, title, onClick, accentColor,
-  iconColor = "var(--bf-primary)",
+  iconColor = "#ffffff",
 }: {
   children: React.ReactNode;
   title: string;
   onClick?: () => void;
   accentColor: string;
-  /** Stroke color for the icon (Lucide uses currentColor). */
+  /** Fill for icons using currentColor (default white on accent backgrounds). */
   iconColor?: string;
 }) {
   return (

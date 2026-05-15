@@ -75,6 +75,7 @@ export default function DmSidebar() {
   const [sessions, setSessions] = useState<DmSession[]>([]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(getDmSessions());
 
     function onStorage(e: StorageEvent) {
@@ -86,6 +87,7 @@ export default function DmSidebar() {
 
   // Re-read on path change so list refreshes when returning from a DM
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessions(getDmSessions());
   }, [pathname]);
 

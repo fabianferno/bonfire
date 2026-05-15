@@ -106,7 +106,7 @@ export default function MessageRow({ msg }: { msg: Message }) {
             <button
               onClick={() => setShowVerify(!showVerify)}
               className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md"
-              style={{ color: "var(--bf-accent)", background: "rgba(208,255,0,0.12)" }}
+              style={{ color: "var(--bf-accent)", background: "rgba(129,22,224,0.12)" }}
             >
               <ShieldCheck size={12} strokeWidth={2} />
               TEE Verified

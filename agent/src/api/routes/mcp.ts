@@ -6,6 +6,11 @@ import { McpJsonSchema } from '../../config/schema.js';
 export function mcpRoutes(opts: { agentDir: string; restartMcp: () => Promise<void> }) {
   const app = new Hono();
   const file = path.join(opts.agentDir, 'mcp.json');
+  app.get('/mcp/servers', async (c) => {
+    let raw: any = { servers: {} };
+    try { raw = JSON.parse(await fs.readFile(file, 'utf8')); } catch {}
+    return c.json({ servers: raw.servers ?? {} });
+  });
   app.post('/mcp/servers', async (c) => {
     const { id, command, args = [], env = {}, enabled = true } = await c.req.json();
     if (!id || !command) return c.json({ ok: false, error: 'id and command required' }, 400);

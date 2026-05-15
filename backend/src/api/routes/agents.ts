@@ -191,6 +191,172 @@ export function agentRoutes(deps: AgentRouteDeps) {
   });
 
   // ---------------------------------------------------------------------------
+  // Public skill search — proxies agentskill.sh so the create-agent flow can
+  // browse skills before an agent runtime exists. Unauthenticated; the upstream
+  // registry is public.
+  // ---------------------------------------------------------------------------
+
+  app.get('/v1/skills/search', async (c) => {
+    const q = (c.req.query('q') ?? '').trim();
+    if (!q) return c.json({ candidates: [] });
+    try {
+      const url = `https://agentskill.sh/api/skills?q=${encodeURIComponent(q)}&limit=20`;
+      const r = await fetch(url);
+      if (!r.ok) {
+        return c.json({ error: 'upstream_status', status: r.status, candidates: [] }, 502);
+      }
+      const data: any = await r.json();
+      const items: any[] = data.data ?? data.results ?? [];
+      const candidates = items.map((it) => ({
+        slug: it.owner && it.name ? `${it.owner}/${it.name}` : (it.slug ?? it.name),
+        owner: it.owner ?? it.githubOwner ?? '',
+        description: it.description ?? '',
+        // agentskill.sh exposes contentQualityScore (0-100); use it as the security/quality signal.
+        securityScore: typeof it.contentQualityScore === 'number' ? it.contentQualityScore : it.securityScore,
+      }));
+      return c.json({ candidates });
+    } catch (e: any) {
+      return c.json({ error: 'upstream_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Skill management — proxies to the agent runtime's /skills/* API.
+  // Owner-only for mutations; reads are public to match the profile-view pattern.
+  // ---------------------------------------------------------------------------
+
+  async function proxySkills(baseUrl: string, path: string, init?: RequestInit) {
+    const res = await fetch(`${baseUrl}${path}`, init);
+    const text = await res.text();
+    let body: unknown = text;
+    try { body = JSON.parse(text); } catch { /* keep raw */ }
+    return { status: res.status, body };
+  }
+
+  app.get('/v1/agents/:aid/skills', async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    try {
+      const r = await proxySkills(a.baseUrl, '/skills');
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  app.get('/v1/agents/:aid/skills/discover', async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    const q = c.req.query('q') ?? '';
+    try {
+      const r = await proxySkills(a.baseUrl, `/skills/discover?q=${encodeURIComponent(q)}`);
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  const InstallSkillBody = z.object({
+    source: z.enum(['agentskill.sh', 'clawhub', 'url']).default('agentskill.sh'),
+    slug: z.string().min(1).max(128).optional(),
+    url: z.string().url().optional(),
+  }).refine(d => d.slug || d.url, { message: 'slug or url required' });
+
+  app.post('/v1/agents/:aid/skills/install', requireAuth, async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    const parsed = InstallSkillBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'validation_failed', issues: parsed.error.issues }, 400);
+    try {
+      const r = await proxySkills(a.baseUrl, '/skills/install', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsed.data),
+      });
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  app.delete('/v1/agents/:aid/skills/:name', requireAuth, async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    const name = c.req.param('name');
+    try {
+      const r = await proxySkills(a.baseUrl, `/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // MCP server management — proxies to the agent runtime's /mcp/* API.
+  // Owner-only for mutations; GET is unauthenticated (profile-view pattern).
+  // ---------------------------------------------------------------------------
+
+  async function proxyMcp(baseUrl: string, path: string, init?: RequestInit) {
+    const res = await fetch(`${baseUrl}${path}`, init);
+    const text = await res.text();
+    let body: unknown = text;
+    try { body = JSON.parse(text); } catch { /* keep raw */ }
+    return { status: res.status, body };
+  }
+
+  app.get('/v1/agents/:aid/mcp/servers', async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    try {
+      const r = await proxyMcp(a.baseUrl, '/mcp/servers');
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  const McpServerBody = z.object({
+    id: z.string().min(1).max(64).regex(/^[a-z0-9_-]+$/),
+    command: z.string().min(1),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string(), z.string()).default({}),
+    enabled: z.boolean().default(true),
+  });
+
+  app.post('/v1/agents/:aid/mcp/servers', requireAuth, async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    const parsed = McpServerBody.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'validation_failed', issues: parsed.error.issues }, 400);
+    try {
+      const r = await proxyMcp(a.baseUrl, '/mcp/servers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsed.data),
+      });
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  app.delete('/v1/agents/:aid/mcp/servers/:id', requireAuth, async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    const id = c.req.param('id');
+    try {
+      const r = await proxyMcp(a.baseUrl, `/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return c.json(r.body as any, r.status as any);
+    } catch (e: any) {
+      return c.json({ error: 'agent_unreachable', message: e?.message ?? String(e) }, 502);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
   // INFT mint flow — two-step: /mint prepares the on-chain payload, /mint/confirm
   // links the minted token back to an AgentDoc after the frontend calls the contract.
   // ---------------------------------------------------------------------------
@@ -208,7 +374,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
       provider: z.enum(['openai-compatible', 'zerog']).optional(),
       baseUrl: z.string().url().optional(),
       model: z.string().optional(),
-      temperature: z.number().min(0).max(2).optional(),
+      temperature: z.number().min(0).max(1).optional(),
       maxTokens: z.number().min(1).max(32000).optional(),
     }).default({}),
   });

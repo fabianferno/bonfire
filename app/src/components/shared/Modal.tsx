@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 
 interface ModalProps {
   title: string;
@@ -51,8 +51,11 @@ export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabe
           <h2 className="text-white text-xl font-bold">{title}</h2>
           {subtitle && <p className="text-sm mt-2.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{subtitle}</p>}
         </div>
+        {/* Small horizontal (and vertical) padding when scrollable so focus rings
+            aren’t clipped by the overflow scrollport (overflow-y: auto implies
+            horizontal clipping of descendant overflow too). */}
         <div
-          className="flex flex-col gap-4"
+          className={`flex flex-col gap-4${maxHeight ? " px-2 py-1" : ""}`}
           style={maxHeight ? { overflowY: "auto", maxHeight } : undefined}
         >
           {children}
@@ -77,9 +80,20 @@ export default function Modal({ title, subtitle, onClose, onConfirm, confirmLabe
   );
 }
 
-export function ModalLabel({ children }: { children: React.ReactNode }) {
+export function ModalLabel({
+  children,
+  className,
+  style,
+}: {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--bf-gray)" }}>
+    <label
+      className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${className ?? ""}`}
+      style={{ color: "var(--bf-gray)", ...style }}
+    >
       {children}
     </label>
   );

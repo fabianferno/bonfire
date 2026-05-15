@@ -14,12 +14,16 @@
  */
 
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useMintAgent } from '@/lib/inft';
 import { api } from '@/lib/api';
 import { ApiError } from '@/lib/api';
+import { bf, type DiscoveredSkill } from '@/lib/api-bonfire';
 import type { BackendAgent } from '@/lib/types';
 import Modal, { ModalLabel, ModalInput, ModalTextarea } from '@/components/shared/Modal';
+import SkillSearchPicker from '@/components/agent/SkillSearchPicker';
 import { MintProgress, type MintStep } from './MintProgress';
 import type { MintPayload } from '@/lib/inft';
 
@@ -43,7 +47,6 @@ interface FormFields {
   tags: string;
   soul: string;
   agents: string;
-  llmModel: string;
   llmTemperature: string;
   llmMaxTokens: string;
 }
@@ -56,11 +59,23 @@ interface FieldErrors {
   soul?: string;
 }
 
+interface McpServerDraft {
+  id: string;
+  command: string;
+  args: string;
+  env: string;
+}
+
+const EMPTY_MCP: McpServerDraft = { id: '', command: '', args: '', env: '' };
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
 const SLUG_RE = /^[a-z0-9_-]{3,32}$/;
+
+/** Field labels in this modal use brand plum (see `globals.css` --bf-plum). */
+const CREATE_AGENT_LABEL_STYLE = { color: "var(--bf-plum)" } as const;
 
 function isValidUrl(s: string): boolean {
   try {
@@ -111,10 +126,14 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     tags: '',
     soul: '',
     agents: '',
-    llmModel: '',
     llmTemperature: '0.7',
     llmMaxTokens: '1024',
   });
+  const [selectedSkills, setSelectedSkills] = useState<DiscoveredSkill[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServerDraft[]>([]);
+  const [mcpForm, setMcpForm] = useState<McpServerDraft>(EMPTY_MCP);
+  const [showMcpForm, setShowMcpForm] = useState(false);
+  const [mcpFormErrors, setMcpFormErrors] = useState<Partial<McpServerDraft>>({});
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -131,6 +150,24 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
       }
     };
+
+  // ------------------------------------------------------------------
+  // MCP server draft helpers
+  // ------------------------------------------------------------------
+
+  const addMcpDraft = () => {
+    const errs: Partial<McpServerDraft> = {};
+    if (!mcpForm.id.trim() || !/^[a-z0-9_-]+$/.test(mcpForm.id.trim())) errs.id = 'Lowercase letters, numbers, - or _';
+    if (!mcpForm.command.trim()) errs.command = 'Command is required';
+    if (mcpServers.some(s => s.id === mcpForm.id.trim())) errs.id = 'ID already used';
+    if (Object.keys(errs).length > 0) { setMcpFormErrors(errs); return; }
+    setMcpServers(prev => [...prev, { ...mcpForm, id: mcpForm.id.trim(), command: mcpForm.command.trim() }]);
+    setMcpForm(EMPTY_MCP);
+    setMcpFormErrors({});
+    setShowMcpForm(false);
+  };
+
+  const removeMcpDraft = (id: string) => setMcpServers(prev => prev.filter(s => s.id !== id));
 
   // ------------------------------------------------------------------
   // Mint submit handler
@@ -174,7 +211,6 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         agents: fields.agents.trim() || undefined,
         llm: {
           provider: 'zerog' as const,
-          model: fields.llmModel.trim() || undefined,
           temperature: Number.isFinite(llmTemp) ? llmTemp : 0.7,
           maxTokens: Number.isFinite(llmMax) ? llmMax : 1024,
         },
@@ -222,6 +258,30 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         '/v1/agents/mint/confirm',
         { txHash, reservationId },
       );
+
+      // ---- Step 4: install queued skills (best-effort; failures don't block) ----
+      if (selectedSkills.length > 0) {
+        await Promise.allSettled(
+          selectedSkills.map((s) =>
+            bf.installSkill(confirmResult.agent.id, { source: 'agentskill.sh', slug: s.slug }),
+          ),
+        );
+      }
+
+      // ---- Step 5: add queued MCP servers (best-effort; failures don't block) ----
+      if (mcpServers.length > 0) {
+        await Promise.allSettled(
+          mcpServers.map((s) => {
+            const args = s.args.trim() ? s.args.split(/\s+/).filter(Boolean) : [];
+            const env: Record<string, string> = {};
+            for (const line of s.env.split('\n')) {
+              const eq = line.indexOf('=');
+              if (eq > 0) env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+            }
+            return bf.addMcpServer(confirmResult.agent.id, { id: s.id, command: s.command, args, env });
+          }),
+        );
+      }
 
       setStep('done');
       onCreated?.(confirmResult.agent);
@@ -308,7 +368,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Slug */}
           <div>
-            <ModalLabel>
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
               Slug <span style={{ color: 'var(--bf-fire)' }}>*</span>
             </ModalLabel>
             <ModalInput
@@ -331,7 +391,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           {/* Name */}
           <div>
-            <ModalLabel>
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
               Name <span style={{ color: 'var(--bf-fire)' }}>*</span>
             </ModalLabel>
             <ModalInput
@@ -354,7 +414,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           {/* Description */}
           <div className="sm:col-span-2">
-            <ModalLabel>
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
               Description <span style={{ color: 'var(--bf-fire)' }}>*</span>
             </ModalLabel>
             <ModalInput
@@ -377,7 +437,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           {/* Avatar URL */}
           <div>
-            <ModalLabel>Avatar URL</ModalLabel>
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Avatar URL</ModalLabel>
             <ModalInput
               type="url"
               value={fields.avatarUrl}
@@ -394,7 +454,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
           {/* Tags */}
           <div>
-            <ModalLabel>Tags</ModalLabel>
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Tags</ModalLabel>
             <ModalInput
               type="text"
               value={fields.tags}
@@ -406,11 +466,141 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               Comma-separated (e.g. research, code, writing)
             </p>
           </div>
+
+          {/* Skills */}
+          <div className="sm:col-span-2">
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Skills (optional)</ModalLabel>
+            <SkillSearchPicker selected={selectedSkills} onChange={setSelectedSkills} />
+            <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+              Search the <code>agentskill.sh</code> registry and pick capabilities. Installed automatically once the agent mints — you can add or remove more later from the agent&apos;s Skills tab.
+            </p>
+          </div>
+
+          {/* MCP Servers */}
+          <div className="sm:col-span-2">
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>MCP Servers (optional)</ModalLabel>
+            <p className="text-xs mb-2" style={{ color: 'var(--bf-gray)' }}>
+              Connect external tools via the Model Context Protocol. Installed automatically post-mint — manageable later from the agent&apos;s MCP Servers tab.
+            </p>
+
+            {mcpServers.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {mcpServers.map(s => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2"
+                    style={{ background: 'var(--bf-tertiary)', border: '1px solid var(--bf-quinary)' }}
+                  >
+                    <span className="flex-1 text-sm font-semibold text-white truncate">{s.id}</span>
+                    <span className="text-xs font-mono truncate" style={{ color: 'var(--bf-gray)', maxWidth: 200 }}>
+                      {s.command}{s.args ? ' ' + s.args : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeMcpDraft(s.id)}
+                      className="ml-1 rounded p-1 hover:bg-rose-900/30 transition-colors"
+                    >
+                      <Trash2 size={13} style={{ color: '#f05b5b' }} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showMcpForm && (
+              <div
+                className="rounded-lg p-3 flex flex-col gap-3 mb-2"
+                style={{ background: 'var(--bf-tertiary)', border: '1px solid var(--bf-quinary)' }}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Server ID <span style={{ color: 'var(--bf-fire)' }}>*</span></ModalLabel>
+                    <ModalInput
+                      type="text"
+                      value={mcpForm.id}
+                      onChange={e => setMcpForm(p => ({ ...p, id: e.target.value }))}
+                      placeholder="my-mcp-server"
+                      autoComplete="off"
+                    />
+                    {mcpFormErrors.id && <p className="text-rose-300 text-xs mt-1">{mcpFormErrors.id}</p>}
+                  </div>
+                  <div>
+                    <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Command <span style={{ color: 'var(--bf-fire)' }}>*</span></ModalLabel>
+                    <ModalInput
+                      type="text"
+                      value={mcpForm.command}
+                      onChange={e => setMcpForm(p => ({ ...p, command: e.target.value }))}
+                      placeholder="npx"
+                      autoComplete="off"
+                    />
+                    {mcpFormErrors.command && <p className="text-rose-300 text-xs mt-1">{mcpFormErrors.command}</p>}
+                  </div>
+                  <div className="sm:col-span-2">
+                    <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Arguments</ModalLabel>
+                    <ModalInput
+                      type="text"
+                      value={mcpForm.args}
+                      onChange={e => setMcpForm(p => ({ ...p, args: e.target.value }))}
+                      placeholder="-y @modelcontextprotocol/server-filesystem /path"
+                      autoComplete="off"
+                    />
+                    <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>Space-separated args</p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Environment variables</ModalLabel>
+                    <textarea
+                      rows={2}
+                      value={mcpForm.env}
+                      onChange={e => setMcpForm(p => ({ ...p, env: e.target.value }))}
+                      placeholder={'API_KEY=abc123\nANOTHER=value'}
+                      className="w-full rounded px-3 py-2 text-sm font-mono resize-y"
+                      style={{
+                        background: 'var(--bf-quaternary)',
+                        border: '1px solid var(--bf-quinary)',
+                        color: 'var(--bf-white)',
+                        outline: 'none',
+                      }}
+                    />
+                    <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>One KEY=VALUE per line</p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowMcpForm(false); setMcpForm(EMPTY_MCP); setMcpFormErrors({}); }}
+                    className="px-3 py-1.5 text-sm rounded"
+                    style={{ color: 'var(--bf-gray)' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addMcpDraft}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded"
+                    style={{ background: 'var(--bf-accent)', color: 'var(--bf-primary)' }}
+                  >
+                    <Plus size={13} /> Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!showMcpForm && (
+              <button
+                type="button"
+                onClick={() => setShowMcpForm(true)}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors"
+                style={{ background: 'var(--bf-tertiary)', color: 'var(--bf-accent)', border: '1px dashed var(--bf-accent)' }}
+              >
+                <Plus size={13} /> Add MCP Server
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── SOUL ───────────────────────────────────────────────────── */}
         <div>
-          <ModalLabel>
+          <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
             SOUL <span style={{ color: 'var(--bf-fire)' }}>*</span>
           </ModalLabel>
           <ModalTextarea
@@ -435,7 +625,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
 
         {/* ── AGENTS / Operating rules ─────────────────────────────── */}
         <div>
-          <ModalLabel>AGENTS (operating rules)</ModalLabel>
+          <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>AGENTS (operating rules)</ModalLabel>
           <ModalTextarea
             rows={6}
             value={fields.agents}
@@ -456,30 +646,24 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         <div>
           <p
             className="text-xs font-semibold uppercase tracking-wider mb-3"
-            style={{ color: 'var(--bf-gray)' }}
+            style={{ color: 'var(--bf-plum)' }}
           >
             LLM settings
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <ModalLabel>Compute</ModalLabel>
-              <p className="text-sm font-medium text-white">0G Compute</p>
-              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--bf-gray)' }}>
-                Marketplace agents run inference through 0G&apos;s broker. Leave{' '}
-                <span className="text-white font-medium">Model</span> empty to let the broker choose, or enter a model name if you have one.
+              <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Compute</ModalLabel>
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/0G-Logo-Purple_Hero.png"
+                  alt="0G Compute"
+                  className="h-7 w-auto"
+                />
+              </div>
+              <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--bf-gray)' }}>
+                Marketplace agents run inference through 0G&apos;s broker. The model is automatically selected based on availability.
               </p>
-            </div>
-
-            {/* Model */}
-            <div>
-              <ModalLabel>Model (optional)</ModalLabel>
-              <ModalInput
-                type="text"
-                value={fields.llmModel}
-                onChange={set('llmModel')}
-                placeholder="auto (broker selects)"
-                autoComplete="off"
-              />
             </div>
 
             {/* Temperature */}
@@ -487,7 +671,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               <div className="flex items-center justify-between gap-3 mb-1.5">
                 <span
                   className="block text-xs font-semibold uppercase tracking-wider"
-                  style={{ color: 'var(--bf-gray)' }}
+                  style={{ color: 'var(--bf-plum)' }}
                 >
                   Temperature
                 </span>
@@ -501,23 +685,28 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
               <input
                 type="range"
                 min={0}
-                max={2}
+                max={1}
                 step={0.1}
                 value={fields.llmTemperature}
                 onChange={set('llmTemperature')}
-                className="w-full h-2 rounded-full appearance-none cursor-pointer bg-[var(--bf-quinary)] accent-[var(--bf-accent)]"
+                className="bf-temperature-range w-full h-2 rounded-full appearance-none cursor-pointer bg-transparent"
+                style={
+                  {
+                    '--temperature-pct': `${Number(fields.llmTemperature || 0) * 100}%`,
+                  } as CSSProperties
+                }
                 aria-valuemin={0}
-                aria-valuemax={2}
+                aria-valuemax={1}
                 aria-valuenow={Number(fields.llmTemperature)}
               />
               <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
-                0 = deterministic · 2 = very creative
+                0 = deterministic · 1 = most creative
               </p>
             </div>
 
             {/* Max tokens */}
             <div>
-              <ModalLabel>Max tokens</ModalLabel>
+              <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Max tokens</ModalLabel>
               <ModalInput
                 type="number"
                 value={fields.llmMaxTokens}

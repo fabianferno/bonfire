@@ -5,8 +5,8 @@
 :root {
   /* Brand palette */
   --bf-blanche:    #FEFFFC; /* Blanche White */
-  --bf-banana:     #D0FF00; /* Banana Yellow — primary brand */
-  --bf-plum:       #8116E0; /* Plum Violet — secondary brand */
+  --bf-banana:     #D0FF00; /* Banana Yellow */
+  --bf-plum:       #8116E0; /* Plum Violet — primary brand */
 
   /* High-contrast dark surfaces — pure black, Discord-like */
   --bf-tertiary:   #000000; /* app body bg */
@@ -21,13 +21,18 @@
   --bf-senary:     #9a9da2;
 
   /* Semantic accents — themed to brand */
-  --bf-accent:     #D0FF00; /* primary actions, highlights */
+  --bf-accent:     #8116E0; /* primary actions, highlights */
   --bf-fire:       #8116E0; /* secondary accent / agent vibe */
   --bf-yellow:     #D0FF00;
   --bf-red:        #f05b5b;
 
   --bf-chat-input: #0f0f0f;
   --bf-border:     rgba(255,255,255,0.08);
+
+  /* Marketplace hero + wide surfaces (0G / plum sweep) */
+  --bf-brand-hero-gradient: linear-gradient(160deg, #0a0014 0%, #2a0060 45%, #8116e0 100%);
+  /* Left-nav action pills — diagonal read at small sizes */
+  --bf-nav-pill-gradient: linear-gradient(45deg, #0a0014 0%, #2a0060 45%, #8116e0 100%);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -51,3 +56,56 @@ body {
 ::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--bf-quaternary); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Range input: filled segment (left of thumb) uses brand plum — used with --temperature-pct on the input */
+input[type="range"].bf-temperature-range::-webkit-slider-runnable-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--bf-plum) 0%,
+    var(--bf-plum) var(--temperature-pct, 35%),
+    var(--bf-quinary) var(--temperature-pct, 35%),
+    var(--bf-quinary) 100%
+  );
+}
+input[type="range"].bf-temperature-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--bf-plum);
+  border: 2px solid var(--bf-tertiary);
+  margin-top: -0.1875rem;
+  box-shadow: 0 0 0 1px var(--bf-border);
+  cursor: pointer;
+}
+input[type="range"].bf-temperature-range::-moz-range-track {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--bf-quinary);
+}
+input[type="range"].bf-temperature-range::-moz-range-progress {
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--bf-plum);
+}
+input[type="range"].bf-temperature-range::-moz-range-thumb {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--bf-plum);
+  box-shadow: 0 0 0 1px var(--bf-border);
+  cursor: pointer;
+}
+input[type="range"].bf-temperature-range:focus {
+  outline: none;
+}
+input[type="range"].bf-temperature-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--bf-tertiary), 0 0 0 4px var(--bf-plum);
+}
+input[type="range"].bf-temperature-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--bf-tertiary), 0 0 0 4px var(--bf-plum);
+}

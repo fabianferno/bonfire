@@ -1,9 +1,12 @@
 "use client";
-import { useState } from "react";
-import { ShieldCheck, Zap, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2 } from "lucide-react";
 import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
+import SkillManager from "./SkillManager";
+import { bf, type McpServerConfig } from "@/lib/api-bonfire";
+import { ModalLabel, ModalInput } from "@/components/shared/Modal";
 
 const STATUS_COLOR: Record<string, string> = {
   online:  "var(--bf-accent)",
@@ -18,7 +21,7 @@ interface Props {
 }
 
 export default function AgentProfileModal({ agent, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "logs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "skills" | "mcp" | "logs">("overview");
 
   return (
     <Modal title="" onClose={onClose} wide maxHeight="70vh">
@@ -56,7 +59,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
 
       {/* Tabs */}
       <div className="flex gap-1" style={{ borderBottom: "1px solid var(--bf-quinary)" }}>
-        {(["overview", "logs"] as const).map(tab => (
+        {(["overview", "skills", "mcp", "logs"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -66,7 +69,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
               borderBottom: activeTab === tab ? "2px solid var(--bf-accent)" : "2px solid transparent",
             }}
           >
-            {tab === "logs" ? "Audit Logs" : "Overview"}
+            {tab === "logs" ? "Audit Logs" : tab === "skills" ? "Skills" : tab === "mcp" ? "MCP Servers" : "Overview"}
           </button>
         ))}
       </div>
@@ -104,23 +107,18 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
             </div>
           )}
 
-          {agent.skills.length > 0 && (
-            <div>
-              <p className="text-xs uppercase tracking-wide mb-2 font-semibold" style={{ color: "var(--bf-gray)" }}>Skills</p>
-              <div className="grid grid-cols-2 gap-2">
-                {agent.skills.map(skill => (
-                  <div key={skill.id} className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Zap size={13} strokeWidth={2} style={{ color: "var(--bf-accent)", flexShrink: 0 }} />
-                      <code className="text-xs font-semibold" style={{ color: "var(--bf-accent)" }}>{skill.command}</code>
-                    </div>
-                    <p className="text-white text-sm font-semibold">{skill.name}</p>
-                    <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{skill.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        </div>
+      )}
+
+      {activeTab === "skills" && (
+        <div className="pt-2">
+          <SkillManager agentId={agent.id} canManage />
+        </div>
+      )}
+
+      {activeTab === "mcp" && (
+        <div className="pt-2">
+          <McpManager agentId={agent.id} />
         </div>
       )}
 
@@ -134,6 +132,230 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
         </div>
       )}
     </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// McpManager
+// ---------------------------------------------------------------------------
+
+const EMPTY_FORM = { id: "", command: "", args: "", env: "" };
+
+function McpManager({ agentId }: { agentId: string }) {
+  const [servers, setServers] = useState<Record<string, McpServerConfig>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState<Partial<typeof EMPTY_FORM>>({});
+
+  useEffect(() => {
+    bf.listMcpServers(agentId)
+      .then(r => setServers(r.servers))
+      .catch(() => setServers({}))
+      .finally(() => setLoading(false));
+  }, [agentId]);
+
+  const validateForm = () => {
+    const errs: Partial<typeof EMPTY_FORM> = {};
+    if (!form.id.trim() || !/^[a-z0-9_-]+$/.test(form.id.trim())) errs.id = "ID: lowercase letters, numbers, - or _";
+    if (!form.command.trim()) errs.command = "Command is required";
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleAdd = async () => {
+    if (!validateForm()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const args = form.args.trim() ? form.args.split(/\s+/).filter(Boolean) : [];
+      const env: Record<string, string> = {};
+      for (const line of form.env.split("\n")) {
+        const eq = line.indexOf("=");
+        if (eq > 0) env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+      }
+      await bf.addMcpServer(agentId, { id: form.id.trim(), command: form.command.trim(), args, env });
+      const r = await bf.listMcpServers(agentId);
+      setServers(r.servers);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to add server");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    setRemoving(id);
+    setError(null);
+    try {
+      await bf.removeMcpServer(agentId, id);
+      setServers(prev => { const n = { ...prev }; delete n[id]; return n; });
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to remove server");
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-12" style={{ color: "var(--bf-gray)" }}>
+      <Loader2 size={20} className="animate-spin mr-2" /> Loading…
+    </div>
+  );
+
+  const entries = Object.entries(servers);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {error && (
+        <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm">{error}</p>
+      )}
+
+      {entries.length === 0 && !showForm && (
+        <div className="flex flex-col items-center gap-2 py-8" style={{ color: "var(--bf-gray)" }}>
+          <Server size={28} strokeWidth={1.5} />
+          <p className="text-sm">No MCP servers configured yet.</p>
+        </div>
+      )}
+
+      {entries.map(([id, cfg]) => (
+        <div
+          key={id}
+          className="flex items-start gap-3 rounded-lg px-3 py-2.5"
+          style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}
+        >
+          <Server size={14} style={{ color: "var(--bf-accent)", flexShrink: 0, marginTop: 3 }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white">{id}</p>
+            <p className="text-xs font-mono mt-0.5 truncate" style={{ color: "var(--bf-gray)" }}>
+              {cfg.command}{cfg.args?.length ? " " + cfg.args.join(" ") : ""}
+            </p>
+            {Object.keys(cfg.env ?? {}).length > 0 && (
+              <p className="text-xs mt-0.5" style={{ color: "var(--bf-symbol)" }}>
+                {Object.keys(cfg.env).length} env var{Object.keys(cfg.env).length !== 1 ? "s" : ""}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span
+              className="text-xs px-1.5 py-0.5 rounded font-semibold"
+              style={{
+                background: cfg.enabled ? "rgba(110,134,214,0.15)" : "rgba(75,85,99,0.3)",
+                color: cfg.enabled ? "var(--bf-accent)" : "var(--bf-gray)",
+              }}
+            >
+              {cfg.enabled ? "enabled" : "disabled"}
+            </span>
+            <button
+              onClick={() => handleRemove(id)}
+              disabled={removing === id}
+              className="rounded p-1 transition-colors hover:bg-rose-900/30 disabled:opacity-40"
+              title="Remove server"
+            >
+              {removing === id
+                ? <Loader2 size={13} className="animate-spin" style={{ color: "var(--bf-gray)" }} />
+                : <Trash2 size={13} style={{ color: "#f05b5b" }} />
+              }
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {showForm && (
+        <div
+          className="rounded-lg p-3 flex flex-col gap-3"
+          style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--bf-gray)" }}>New MCP Server</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <ModalLabel>Server ID <span style={{ color: "var(--bf-fire)" }}>*</span></ModalLabel>
+              <ModalInput
+                type="text"
+                value={form.id}
+                onChange={e => setForm(p => ({ ...p, id: e.target.value }))}
+                placeholder="my-mcp-server"
+                autoComplete="off"
+              />
+              {formErrors.id && <p className="text-rose-300 text-xs mt-1">{formErrors.id}</p>}
+            </div>
+            <div>
+              <ModalLabel>Command <span style={{ color: "var(--bf-fire)" }}>*</span></ModalLabel>
+              <ModalInput
+                type="text"
+                value={form.command}
+                onChange={e => setForm(p => ({ ...p, command: e.target.value }))}
+                placeholder="npx"
+                autoComplete="off"
+              />
+              {formErrors.command && <p className="text-rose-300 text-xs mt-1">{formErrors.command}</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <ModalLabel>Arguments</ModalLabel>
+              <ModalInput
+                type="text"
+                value={form.args}
+                onChange={e => setForm(p => ({ ...p, args: e.target.value }))}
+                placeholder="-y @modelcontextprotocol/server-filesystem /path"
+                autoComplete="off"
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--bf-gray)" }}>Space-separated args</p>
+            </div>
+            <div className="sm:col-span-2">
+              <ModalLabel>Environment variables</ModalLabel>
+              <textarea
+                rows={3}
+                value={form.env}
+                onChange={e => setForm(p => ({ ...p, env: e.target.value }))}
+                placeholder={"API_KEY=abc123\nANOTHER_VAR=value"}
+                className="w-full rounded px-3 py-2 text-sm font-mono resize-y"
+                style={{
+                  background: "var(--bf-tertiary)",
+                  border: "1px solid var(--bf-quinary)",
+                  color: "var(--bf-white)",
+                  outline: "none",
+                }}
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--bf-gray)" }}>One KEY=VALUE per line</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormErrors({}); }}
+              className="px-3 py-1.5 text-sm rounded"
+              style={{ color: "var(--bf-gray)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAdd}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded disabled:opacity-40"
+              style={{ background: "var(--bf-accent)", color: "var(--bf-primary)" }}
+            >
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              Add Server
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!showForm && (
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors self-start"
+          style={{ background: "var(--bf-quaternary)", color: "var(--bf-accent)", border: "1px dashed var(--bf-accent)" }}
+        >
+          <Plus size={14} />
+          Add MCP Server
+        </button>
+      )}
+    </div>
   );
 }
 

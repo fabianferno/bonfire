@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { installSkill, removeSkill } from '../../skills/installer.js';
 import type { SkillRecord } from '../../skills/loader.js';
+import { discover } from '../../evolution/discover.js';
 
 export function skillsRoutes(opts: {
   agentDir: string;
@@ -23,6 +24,11 @@ export function skillsRoutes(opts: {
     if (ok) await opts.reload();
     return c.json({ ok });
   });
-  app.get('/skills/discover', (c) => c.json({ candidates: [] }));
+  app.get('/skills/discover', async (c) => {
+    const q = c.req.query('q')?.trim();
+    if (!q) return c.json({ candidates: [] });
+    const candidates = await discover([q]);
+    return c.json({ candidates });
+  });
   return app;
 }

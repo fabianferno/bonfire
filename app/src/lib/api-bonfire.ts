@@ -112,4 +112,64 @@ export const bf = {
 
   getUser: (username: string) =>
     api<{ user: BackendUser }>('GET', `/v1/users/${username}`),
+
+  searchSkills: (q: string) =>
+    api<{ candidates: DiscoveredSkill[] }>(
+      'GET',
+      `/v1/skills/search?q=${encodeURIComponent(q)}`,
+      undefined,
+      { auth: false },
+    ),
+
+  listAgentSkills: (aid: string) =>
+    api<{ skills: InstalledSkill[] }>('GET', `/v1/agents/${aid}/skills`, undefined, { auth: false }),
+
+  discoverSkills: (aid: string, q: string) =>
+    api<{ candidates: DiscoveredSkill[] }>(
+      'GET',
+      `/v1/agents/${aid}/skills/discover?q=${encodeURIComponent(q)}`,
+      undefined,
+      { auth: false },
+    ),
+
+  installSkill: (
+    aid: string,
+    body: { source?: 'agentskill.sh' | 'clawhub' | 'url'; slug?: string; url?: string },
+  ) => api<InstallSkillResult>('POST', `/v1/agents/${aid}/skills/install`, body),
+
+  removeSkill: (aid: string, name: string) =>
+    api<{ ok: boolean }>('DELETE', `/v1/agents/${aid}/skills/${encodeURIComponent(name)}`),
+
+  listMcpServers: (aid: string) =>
+    api<{ servers: Record<string, McpServerConfig> }>('GET', `/v1/agents/${aid}/mcp/servers`, undefined, { auth: false }),
+
+  addMcpServer: (aid: string, body: { id: string; command: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }) =>
+    api<{ ok: boolean }>('POST', `/v1/agents/${aid}/mcp/servers`, body),
+
+  removeMcpServer: (aid: string, id: string) =>
+    api<{ ok: boolean }>('DELETE', `/v1/agents/${aid}/mcp/servers/${encodeURIComponent(id)}`),
 };
+
+export interface InstalledSkill {
+  name: string;
+  description?: string;
+  source?: string;
+}
+
+export interface DiscoveredSkill {
+  slug: string;
+  owner: string;
+  description: string;
+  securityScore?: number;
+}
+
+export type InstallSkillResult =
+  | { ok: true; name: string }
+  | { ok: false; error: string; findings?: unknown[] };
+
+export interface McpServerConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  enabled: boolean;
+}

@@ -2,9 +2,8 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldCheck, Star, Cpu, Mic, Search, LayoutGrid, Plus,
-  ChevronLeft, ChevronRight, ImagePlus, Share2, MoreHorizontal, X,
-  Flame, Sparkles, Bot,
+  Search, Plus, ImagePlus, Share2, MoreHorizontal, X,
+  Flame, Sparkles, Bot, MessageSquare,
 } from 'lucide-react';
 import { bf } from '@/lib/api-bonfire';
 import { useAuth } from '@/components/auth/AuthProvider';
@@ -12,19 +11,12 @@ import type { BackendAgent } from '@/lib/types';
 import InviteToServerModal from '@/components/marketplace/InviteToServerModal';
 import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
-
-// ── Static data ──────────────────────────────────────────────────────────────
-
-const NAV_ITEMS = [
-  { label: 'Agents', icon: LayoutGrid },
-  { label: 'Models', icon: Cpu },
-  { label: 'Voice', icon: Mic },
-];
+import DmSidebar, { upsertDmSession } from '@/components/dm/DmSidebar';
 
 const CATEGORY_COLOR: Record<string, string> = {
-  Research: '#D0FF00',
+  Research: '#8116E0',
   Code: '#43b581',
-  Finance: '#D0FF00',
+  Finance: '#8116E0',
   Voice: '#8116E0',
   Generalist: '#8116E0',
 };
@@ -32,7 +24,7 @@ const CATEGORY_COLOR: Record<string, string> = {
 const TAG_BANNER: Record<string, string> = {
   research: 'linear-gradient(135deg,#0a0014 0%,#2a0060 60%,#8116E0 100%)',
   code: 'linear-gradient(135deg,#0a0014 0%,#1b3a1b 60%,#43b581 100%)',
-  finance: 'linear-gradient(135deg,#0a0014 0%,#1a1500 60%,#D0FF00 100%)',
+  finance: 'linear-gradient(135deg,#0a0014 0%,#2a0060 60%,#8116E0 100%)',
   voice: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
   generalist: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
 };
@@ -40,7 +32,7 @@ const TAG_BANNER: Record<string, string> = {
 const TAG_COLOR: Record<string, string> = {
   research: '#8116E0',
   code: '#43b581',
-  finance: '#D0FF00',
+  finance: '#8116E0',
   voice: '#8116E0',
   generalist: '#8116E0',
 };
@@ -60,10 +52,12 @@ function AgentDetailOverlay({
   agent,
   onClose,
   onInvite,
+  onMessage,
 }: {
   agent: BackendAgent;
   onClose: () => void;
   onInvite: (a: BackendAgent) => void;
+  onMessage: (a: BackendAgent) => void;
 }) {
   const [ssIdx, setSsIdx] = useState(0);
   const banner = agentBanner(agent);
@@ -102,6 +96,14 @@ function AgentDetailOverlay({
           </button>
           <button className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bf-quinary)]" style={{ color: 'var(--bf-gray)' }}>
             <MoreHorizontal size={15} />
+          </button>
+          <button
+            onClick={() => { onMessage(agent); onClose(); }}
+            className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5"
+            style={{ background: 'var(--bf-quinary)', color: 'white' }}
+          >
+            <MessageSquare size={14} />
+            Message
           </button>
           <button
             onClick={() => { onInvite(agent); onClose(); }}
@@ -267,7 +269,6 @@ function EmptyState({
 // ── Inner page ────────────────────────────────────────────────────────────────
 
 function MarketplaceInner() {
-  const [activeNav, setActiveNav] = useState('Agents');
   const [query, setQuery] = useState('');
   const [agents, setAgents] = useState<BackendAgent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -288,18 +289,29 @@ function MarketplaceInner() {
     return () => { cancelRef.current = true; };
   }, []);
 
-  const filtered = agents.filter(a => {
-    const matchNav = activeNav === 'Agents' || a.tags.some(t => t.toLowerCase() === activeNav.toLowerCase());
-    const matchQ = a.name.toLowerCase().includes(query.toLowerCase()) ||
-      a.description.toLowerCase().includes(query.toLowerCase());
-    return matchNav && matchQ;
-  });
+  const filtered = agents.filter(a =>
+    a.name.toLowerCase().includes(query.toLowerCase()) ||
+    a.description.toLowerCase().includes(query.toLowerCase())
+  );
 
   const featured = agents.slice(0, 3);
 
   const openInvite = (a: BackendAgent) => {
     if (status !== 'authenticated') { router.push('/login'); return; }
     setInviteTarget(a);
+  };
+
+  const startDm = (a: BackendAgent) => {
+    upsertDmSession({
+      agentId: a.id,
+      agentName: a.name,
+      agentSlug: a.slug,
+      agentAvatar: a.avatarUrl,
+      agentBaseUrl: a.baseUrl,
+      lastMessage: '',
+      lastMessageAt: new Date().toISOString(),
+    });
+    router.push(`/dm/${a.id}`);
   };
 
   return (
@@ -309,59 +321,33 @@ function MarketplaceInner() {
         {/* Server rail */}
         <LeftNav />
 
-        {/* Discover sidebar */}
-        <aside className="w-60 flex-shrink-0 flex flex-col border-r" style={{ background: 'var(--bf-secondary)', borderColor: 'var(--bf-quaternary)' }}>
-          <div className="px-4 h-12 border-b flex items-center" style={{ borderColor: 'var(--bf-quaternary)' }}>
-            <span className="font-bold" style={{ fontSize: 15, color: 'white' }}>Discover</span>
-          </div>
-          <div className="px-2 pt-3 flex flex-col gap-1">
-            {NAV_ITEMS.map(({ label, icon: Icon }) => {
-              const isActive = activeNav === label;
-              return (
-                <button
-                  key={label}
-                  onClick={() => { setActiveNav(label); }}
-                  className="flex items-center gap-3 w-full px-3 py-2 rounded-md transition-colors"
-                  style={{ color: isActive ? 'white' : 'var(--bf-gray)', background: isActive ? 'var(--bf-quinary)' : 'transparent', fontSize: 15, fontWeight: 500 }}
-                  onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'var(--bf-quinary)'; (e.currentTarget as HTMLElement).style.color = 'white'; } }}
-                  onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--bf-gray)'; } }}
-                >
-                  <Icon size={20} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          {status === 'authenticated' && (
-            <div className="mt-auto px-3 pb-4 pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ background: 'var(--bf-fire)', fontSize: 14 }}
-              >
-                <Plus size={16} strokeWidth={2.5} />
-                Create Agent
-              </button>
-            </div>
-          )}
-        </aside>
+        {/* DM sidebar */}
+        <DmSidebar />
 
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* Hero banner */}
-          <div className="relative" style={{ background: 'linear-gradient(160deg,#0a0014 0%,#2a0060 45%,#8116E0 100%)', }}>
-            <div className="px-10 py-8">
-              <h1 className="font-display text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
-                {activeNav === 'Voice' ? (<>VOICE AGENTS<br />ON BONFIRE</>) :
-                  activeNav === 'Models' ? (<>LLM MODELS<br />ON BONFIRE</>) :
-                    (<>FIND YOUR AGENT<br />ON BONFIRE</>)}
-              </h1>
-              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
-                {activeNav === 'Voice' ? 'Real-time voice agents powered by LiveKit and 0G Compute.' :
-                  activeNav === 'Models' ? 'Browse available LLM models for your agents.' :
-                    'Every agent is an INFT running verifiable inference on 0G Compute.'}
-              </p>
+          <div className="relative flex-shrink-0" style={{ background: 'var(--bf-brand-hero-gradient)' }}>
+            <div className="px-10 pt-8 pb-10 flex items-end justify-between">
+              <div>
+                <h1 className="font-display text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
+                  FIND YOUR AGENT<br />ON BONFIRE
+                </h1>
+                <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
+                  Every agent is an INFT running verifiable inference on 0G Compute.
+                </p>
+              </div>
+              {status === 'authenticated' && (
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-opacity hover:opacity-90 flex-shrink-0"
+                  style={{ background: 'var(--bf-white)', color: 'var(--bf-fire)', fontSize: 14 }}
+                >
+                  <Plus size={16} strokeWidth={2.5} />
+                  Create Agent
+                </button>
+              )}
             </div>
           </div>
 
@@ -399,7 +385,15 @@ function MarketplaceInner() {
                                 <span className="font-bold text-white text-sm">{agent.name}</span>
                               </div>
                               <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
-                              <div className="flex items-center justify-end">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={e => { e.stopPropagation(); startDm(agent); }}
+                                  className="text-xs px-3 py-1 rounded font-semibold flex items-center gap-1"
+                                  style={{ background: 'var(--bf-quinary)', color: 'white' }}
+                                >
+                                  <MessageSquare size={12} />
+                                  Message
+                                </button>
                                 <button
                                   onClick={e => { e.stopPropagation(); openInvite(agent); }}
                                   className="text-xs px-3 py-1 rounded font-semibold text-white"
@@ -472,13 +466,23 @@ function MarketplaceInner() {
                               <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
                               <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
                                 <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
-                                <button
-                                  onClick={e => { e.stopPropagation(); openInvite(agent); }}
-                                  className="text-xs px-3 py-1.5 rounded font-semibold text-white"
-                                  style={{ background: 'var(--bf-accent)' }}
-                                >
-                                  Invite
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={e => { e.stopPropagation(); startDm(agent); }}
+                                    className="text-xs px-2.5 py-1.5 rounded font-semibold flex items-center gap-1"
+                                    style={{ background: 'var(--bf-quinary)', color: 'white' }}
+                                  >
+                                    <MessageSquare size={11} />
+                                    Message
+                                  </button>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); openInvite(agent); }}
+                                    className="text-xs px-2.5 py-1.5 rounded font-semibold text-white"
+                                    style={{ background: 'var(--bf-accent)' }}
+                                  >
+                                    Invite
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -499,6 +503,7 @@ function MarketplaceInner() {
           agent={detailAgent}
           onClose={() => setDetailAgent(null)}
           onInvite={openInvite}
+          onMessage={startDm}
         />
       )}
 

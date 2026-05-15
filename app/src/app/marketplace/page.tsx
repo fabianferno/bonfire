@@ -392,7 +392,7 @@ function MarketplaceInner() {
                                 <button
                                   onClick={e => { e.stopPropagation(); startDm(agent); }}
                                   className="text-xs px-3 py-1 rounded font-semibold flex items-center gap-1"
-                                  style={{ background: 'var(--bf-quinary)', color: 'white' }}
+                                  style={{ background: 'var(--bf-white)', color: 'var(--bf-primary)' }}
                                 >
                                   <MessageSquare size={12} />
                                   Message
@@ -476,7 +476,7 @@ function MarketplaceInner() {
                                   <button
                                     onClick={e => { e.stopPropagation(); startDm(agent); }}
                                     className="text-xs px-2.5 py-1.5 rounded font-semibold flex items-center gap-1"
-                                    style={{ background: 'var(--bf-quinary)', color: 'white' }}
+                                    style={{ background: 'var(--bf-white)', color: 'var(--bf-primary)' }}
                                   >
                                     <MessageSquare size={11} />
                                     Message

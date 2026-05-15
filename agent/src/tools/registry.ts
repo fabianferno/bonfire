@@ -4,6 +4,7 @@ import { webFetchTool } from './builtin/web-fetch.js';
 import { makeWebSearchTool } from './builtin/web-search.js';
 import { makeCodeExecTool } from './builtin/code-exec.js';
 import { makeFileOpsTools } from './builtin/file-ops.js';
+import { publishSiteTool } from './builtin/publish-site.js';
 import type { McpHandle } from './mcp-client.js';
 
 export function buildToolRegistry(cfg: AgentConfig, mcpHandles: McpHandle[]): Record<string, Tool> {
@@ -16,6 +17,7 @@ export function buildToolRegistry(cfg: AgentConfig, mcpHandles: McpHandle[]): Re
   }
   if (b.codeExec.enabled) tools.code_exec = makeCodeExecTool(b.codeExec.timeoutMs);
   if (b.fileOps.enabled) Object.assign(tools, makeFileOpsTools(b.fileOps.rootDir));
+  if (b.publishSite.enabled) tools.publish_site = publishSiteTool;
   for (const h of mcpHandles) Object.assign(tools, h.tools);
   return tools;
 }

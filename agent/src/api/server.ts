@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { healthRoutes } from './routes/health.js';
 import { skillsRoutes } from './routes/skills.js';
@@ -31,6 +32,13 @@ export interface ApiDeps {
 
 export function startApi(port: number, d: ApiDeps) {
   const app = new Hono();
+  app.use('*', cors({
+    origin: (o) => o ?? '*',
+    allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
+    maxAge: 86400,
+  }));
   app.route('/', healthRoutes());
   app.route('/', skillsRoutes({ agentDir: d.agentDir, evolutionMode: d.evolutionMode, listSkills: d.listSkills, reload: d.reload }));
   app.route('/', mcpRoutes({ agentDir: d.agentDir, restartMcp: d.restartMcp }));

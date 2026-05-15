@@ -9,6 +9,7 @@ import MessageComposer from "@/components/message/MessageComposer";
 import Avatar from "@/components/shared/Avatar";
 import { BF_BRAND_EMOJI } from "@/lib/brand";
 import { appAgentAvatarSrc } from "@/lib/agent-identicon";
+import { resolveGreetingName, greetingUsesFallback } from "@/lib/greeting-name";
 
 export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
@@ -94,31 +95,13 @@ export default function CenterPane() {
 
 // ── Empty states ──────────────────────────────────────────────────────────────
 
-// Claude-style cool fallback names when the user hasn't told us what to call them.
-const COOL_FALLBACKS = [
-  "friend", "explorer", "wanderer", "trailblazer", "stargazer",
-  "kindred spirit", "fellow traveler", "curious one", "night owl", "firekeeper",
-];
-
-function isPrivyDid(s: string | undefined): boolean {
-  return !!s && s.startsWith("did:");
-}
-
-function resolveGreetingName(preferred: string, username: string): string {
-  if (preferred.trim()) return preferred.trim();
-  if (username && !isPrivyDid(username) && username !== "You") return username;
-  // Stable per-session pick so the name doesn't flicker on re-render
-  const idx = Math.floor((typeof window !== "undefined" ? performance.timeOrigin : 0) % COOL_FALLBACKS.length);
-  return COOL_FALLBACKS[idx] ?? "friend";
-}
-
 function NoServersHero() {
   const router = useRouter();
   const { user, preferredName, setPreferredName } = useApp();
   const openCreate = () => window.dispatchEvent(new Event("bonfire:open-create-server"));
 
   const displayName = resolveGreetingName(preferredName, user.username);
-  const usingFallback = !preferredName.trim() && (isPrivyDid(user.username) || user.username === "You");
+  const usingFallback = greetingUsesFallback(preferredName, user.username);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(preferredName);

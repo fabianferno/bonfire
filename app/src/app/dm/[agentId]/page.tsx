@@ -98,7 +98,9 @@ export default function DmPage() {
       const { streamId } = await res.json();
 
       // Read SSE stream
-      const stream = await fetch(`${session.agentBaseUrl}/chat/stream/${streamId}`);
+      const stream = await fetch(`${session.agentBaseUrl}/chat/stream/${streamId}`, {
+        headers: { Accept: "text/event-stream" },
+      });
       const reader = stream.body?.getReader();
       if (!reader) throw new Error("No stream");
 
@@ -112,39 +114,54 @@ export default function DmPage() {
       setMessages(withAgent);
 
       const decoder = new TextDecoder();
+      const REPLACE = "\x00REPLACE\x00";
       let buf = "";
       let full = "";
+      let currentEvent = "message";
+      let doneSeen = false;
 
-      while (true) {
+      outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
         for (const line of lines) {
+          if (line === "") {
+            if (currentEvent === "done") { doneSeen = true; break outer; }
+            currentEvent = "message";
+            continue;
+          }
+          if (line.startsWith("event: ")) {
+            currentEvent = line.slice(7).trim();
+            continue;
+          }
           if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") break;
+          const data = line.slice(6);
+          if (currentEvent === "done") continue;
           try {
             const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content ?? parsed.text ?? parsed.content ?? "";
-            if (delta) {
-              full += delta;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === agentMsg.id ? { ...m, content: full } : m))
-              );
+            const chunk: string =
+              parsed.chunk ??
+              parsed.choices?.[0]?.delta?.content ??
+              parsed.text ??
+              parsed.content ??
+              "";
+            if (!chunk) continue;
+            if (chunk.startsWith(REPLACE)) {
+              full = chunk.slice(REPLACE.length);
+            } else {
+              full += chunk;
             }
+            setMessages((prev) =>
+              prev.map((m) => (m.id === agentMsg.id ? { ...m, content: full } : m))
+            );
           } catch {
-            // raw text delta
-            if (data && data !== "[DONE]") {
-              full += data;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === agentMsg.id ? { ...m, content: full } : m))
-              );
-            }
+            // ignore non-JSON data lines
           }
         }
       }
+      void doneSeen;
 
       // Persist final state
       const finalMessages = withAgent.map((m) =>

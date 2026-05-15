@@ -1,10 +1,14 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { bf } from '@/lib/api-bonfire';
 import type { BackendServerWallet, BackendServerFunding } from '@/lib/types';
 import Modal, { ModalLabel, ModalInput } from '@/components/shared/Modal';
 import { useFundServerWallet } from '@/lib/server-wallet';
 import { useAuth } from '@/components/auth/AuthProvider';
+
+/** Below this OG balance we warn, show faucet link, and omit the tier pill (no "Low" label). */
+const LOW_BALANCE_THRESHOLD_OG = 0.1;
 
 interface Props {
   serverId: string;
@@ -31,6 +35,7 @@ export default function WalletPanel({ serverId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [action, setAction] = useState<'topup' | 'withdraw' | null>(null);
+  const [addressCopied, setAddressCopied] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -53,6 +58,21 @@ export default function WalletPanel({ serverId }: Props) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    setAddressCopied(false);
+  }, [serverId, wallet?.address]);
+
+  const copyWalletAddress = async () => {
+    if (!wallet) return;
+    try {
+      await navigator.clipboard.writeText(wallet.address);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
   if (loading && !wallet) {
     return (
       <div className="mx-2 mb-2 px-3 py-2 rounded-lg text-sm" style={{ color: 'var(--bf-symbol)', background: 'var(--bf-quaternary)' }}>
@@ -71,14 +91,14 @@ export default function WalletPanel({ serverId }: Props) {
 
   const short = wallet.address.slice(0, 6) + '…' + wallet.address.slice(-4);
   const bal = balance !== null ? Number(balance) : null;
-  const lowBalance = bal !== null && bal < 0.5;
+  const lowBalance = bal !== null && bal < LOW_BALANCE_THRESHOLD_OG;
 
   const tier =
     bal === null ? null :
-    bal >= 10   ? { label: "Blazing",  color: "#f97316" } :
-    bal >= 2    ? { label: "Powered",  color: "#7c9cf5" } :
-    bal >= 0.5  ? { label: "Active",   color: "var(--bf-accent)" } :
-                  { label: "Low",      color: "#f05b5b" };
+    bal >= 10 ? { label: "Blazing", color: "#f97316" } :
+    bal >= 2 ? { label: "Powered", color: "#7c9cf5" } :
+    bal >= LOW_BALANCE_THRESHOLD_OG ? { label: "Active", color: "var(--bf-accent)" } :
+    null;
 
   return (
     <div
@@ -114,10 +134,23 @@ export default function WalletPanel({ serverId }: Props) {
         {bal !== null ? `${bal.toFixed(4)} OG` : '— OG'}
       </div>
 
-      {/* Wallet address */}
-      <code className="text-xs font-mono mt-0.5 block" style={{ color: 'var(--bf-gray)' }}>
-        {short}
-      </code>
+      {/* Wallet address — click to copy full address */}
+      <button
+        type="button"
+        onClick={copyWalletAddress}
+        title={addressCopied ? 'Copied' : 'Copy address'}
+        aria-label={addressCopied ? 'Address copied' : 'Copy wallet address'}
+        className="mt-0.5 flex w-full cursor-pointer items-center gap-1.5 rounded-md border-0 bg-transparent py-0.5 pl-0 pr-0 text-left transition-colors hover:opacity-90"
+      >
+        <code className="min-w-0 flex-1 truncate font-mono text-xs" style={{ color: 'var(--bf-gray)' }}>
+          {short}
+        </code>
+        {addressCopied ? (
+          <Check className="shrink-0" size={14} strokeWidth={2.25} style={{ color: '#86efac' }} aria-hidden />
+        ) : (
+          <Copy className="shrink-0 opacity-70" size={14} strokeWidth={2} style={{ color: 'var(--bf-symbol)' }} aria-hidden />
+        )}
+      </button>
 
       <div className="flex gap-1.5 mt-2">
         <button
@@ -142,8 +175,7 @@ export default function WalletPanel({ serverId }: Props) {
           href={funding.faucetUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs underline mt-1.5 inline-block"
-          style={{ color: 'var(--bf-accent)' }}
+          className="text-xs underline mt-1.5 inline-block text-zinc-400 hover:text-zinc-300 transition-colors"
         >
           Fund at faucet →
         </a>

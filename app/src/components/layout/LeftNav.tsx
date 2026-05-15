@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Avatar from "boring-avatars";
 import { useApp } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import WalletFundingModal from "@/components/server/WalletFundingModal";
@@ -271,7 +272,7 @@ function ServerPill({
           width: 48,
           height: 48,
           borderRadius: active ? "30%" : "50%",
-          background: color,
+          background: icon ? color : "transparent",
         }}
         onMouseEnter={e => {
           if (!active) (e.currentTarget as HTMLElement).style.borderRadius = "30%";
@@ -282,7 +283,13 @@ function ServerPill({
       >
         {icon
           ? <img src={icon} alt={name} className="w-7 h-7 object-cover" />
-          : <span className="text-xl select-none">{name.charAt(0).toUpperCase()}</span>
+          : <Avatar
+              name={name}
+              size={48}
+              variant="bauhaus"
+              colors={["#f97316", "#faa61a", "#ed1b24", "#6633cc", "#00d8ff"]}
+              square
+            />
         }
       </button>
     </div>

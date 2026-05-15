@@ -9,7 +9,7 @@ interface AvatarProps {
   className?: string;
 }
 
-export default function Avatar({ src, name, size = 32, color = "#6e86d6", emoji, className = "" }: AvatarProps) {
+export default function Avatar({ src, name, size = 32, color = "var(--bf-plum)", emoji, className = "" }: AvatarProps) {
   const style = { width: size, height: size, minWidth: size, minHeight: size };
 
   if (src && !src.startsWith("#")) {

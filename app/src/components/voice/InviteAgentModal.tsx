@@ -5,6 +5,7 @@ import { X, UserPlus, Search } from "lucide-react";
 import { bf } from "@/lib/api-bonfire";
 import { voiceApi } from "@/lib/voice";
 import type { BackendAgent } from "@/lib/types";
+import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -201,24 +202,11 @@ export default function InviteAgentModal({
                     style={{ background: "var(--bf-secondary)" }}
                   >
                     {/* Avatar */}
-                    {agent.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={agent.avatarUrl}
-                        alt={agent.name}
-                        className="w-11 h-11 rounded-full object-cover flex-shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0"
-                        style={{
-                          background: "var(--bf-quinary)",
-                          color: "var(--bf-white)",
-                        }}
-                      >
-                        {agent.name.slice(0, 1).toUpperCase()}
-                      </div>
-                    )}
+                    <img
+                      src={agentAvatarDisplayUrl(agent)}
+                      alt={agent.name}
+                      className="w-11 h-11 rounded-full object-cover flex-shrink-0 bg-[var(--bf-quaternary)]"
+                    />
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">

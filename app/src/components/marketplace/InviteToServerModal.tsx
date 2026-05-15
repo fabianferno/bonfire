@@ -4,6 +4,7 @@ import { useApp } from '@/context/AppContext';
 import { ApiError } from '@/lib/api';
 import type { BackendAgent } from '@/lib/types';
 import type { Agent } from '@/context/AppContext';
+import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
 import Modal from '@/components/shared/Modal';
 
 interface Props {
@@ -28,7 +29,8 @@ function toAgent(a: BackendAgent): Agent {
   return {
     id: a.id,
     name: a.name,
-    avatar: a.avatarUrl ?? undefined,
+    slug: a.slug,
+    avatar: agentAvatarDisplayUrl(a),
     description: a.description,
     status: 'online',
     isBot: true,

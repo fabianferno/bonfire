@@ -18,6 +18,7 @@ import type {
   BackendServerWallet,
   BackendServerFunding,
 } from "@/lib/types";
+import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 
 // ─── Public types (kept stable so existing components compile) ─────────────
 
@@ -35,6 +36,8 @@ export interface Skill {
 export interface Agent {
   id: string;
   name: string;
+  /** Marketplace / backend handle — used for identicon seed when avatar is unset or legacy hex. */
+  slug?: string;
   avatar?: string;
   emoji?: string;
   description: string;
@@ -324,7 +327,8 @@ function mapAgent(a: BackendAgent): Agent {
   return {
     id: a.id,
     name: a.name,
-    avatar: a.avatarUrl ?? undefined,
+    slug: a.slug,
+    avatar: agentAvatarDisplayUrl(a),
     description: a.description,
     model: undefined,
     status: "online",

@@ -8,6 +8,7 @@ import MessageFeed from "@/components/message/MessageFeed";
 import MessageComposer from "@/components/message/MessageComposer";
 import Avatar from "@/components/shared/Avatar";
 import { BF_BRAND_EMOJI } from "@/lib/brand";
+import { appAgentAvatarSrc } from "@/lib/agent-identicon";
 
 export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
@@ -328,6 +329,7 @@ interface VoiceAgent {
   name: string;
   emoji?: string;
   avatar?: string;
+  slug?: string;
   status: string;
 }
 
@@ -357,7 +359,7 @@ function VoiceStatusPane({
     voice.inviteAgentToVoice(agent.id);
     setParticipantInfo(prev => ({
       ...prev,
-      [agent.id]: { name: agent.name, emoji: agent.emoji, color: agent.avatar },
+      [agent.id]: { name: agent.name, emoji: agent.emoji, color: appAgentAvatarSrc(agent) },
     }));
   };
 
@@ -524,6 +526,7 @@ function ParticipantTile({
 }: {
   participant: VoiceParticipant;
   emoji?: string;
+  /** Hex fallback color or image URL (e.g. identicon). */
   color?: string;
   onTalk?: () => void;
   talkingTo?: boolean;
@@ -531,6 +534,9 @@ function ParticipantTile({
   const displayName = participant.userName.startsWith("did:")
     ? participant.userName.slice(0, 14) + "…"
     : participant.userName;
+
+  const avatarSrc = color && !color.startsWith("#") ? color : undefined;
+  const fallbackColor = color?.startsWith("#") ? color : "var(--bf-plum)";
 
   return (
     <div
@@ -548,8 +554,9 @@ function ParticipantTile({
         <Avatar
           name={participant.userName}
           size={60}
-          color={color?.startsWith("#") ? color : "#7c9cf5"}
+          color={fallbackColor}
           emoji={emoji}
+          src={avatarSrc}
         />
         {participant.speaking && (
           <span

@@ -52,11 +52,7 @@ export default function VoiceParticipantTile({ participant, onKick }: Props) {
               : "2px solid transparent",
           }}
         >
-          <Avatar
-            name={name}
-            size={64}
-            color={isAgent ? "#7c9cf5" : "#6e86d6"}
-          />
+          <Avatar name={name} size={64} />
         </div>
       </div>
 

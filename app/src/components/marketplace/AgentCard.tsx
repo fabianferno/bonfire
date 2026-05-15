@@ -1,5 +1,6 @@
 'use client';
 import type { BackendAgent } from '@/lib/types';
+import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
 
 interface Props {
   agent: BackendAgent;
@@ -13,21 +14,11 @@ export default function AgentCard({ agent, onInvite }: Props) {
       style={{ background: 'var(--bf-secondary)' }}
     >
       <div className="flex items-start gap-3">
-        {agent.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={agent.avatarUrl}
-            alt={agent.name}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-          />
-        ) : (
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0"
-            style={{ background: 'var(--bf-quinary)', color: 'var(--bf-white)' }}
-          >
-            {agent.name.slice(0, 1).toUpperCase()}
-          </div>
-        )}
+        <img
+          src={agentAvatarDisplayUrl(agent)}
+          alt={agent.name}
+          className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[var(--bf-quaternary)]"
+        />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-white truncate">{agent.name}</h3>
           <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>

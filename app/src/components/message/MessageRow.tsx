@@ -83,7 +83,7 @@ export default function MessageRow({ msg }: { msg: Message }) {
       <Avatar
         name={msg.author}
         size={42}
-        color={msg.isBot ? "#fb923c" : "#7c9cf5"}
+        color={msg.isBot ? "#fb923c" : "var(--bf-plum)"}
         src={msg.avatar}
         className="mt-0.5 flex-shrink-0"
       />

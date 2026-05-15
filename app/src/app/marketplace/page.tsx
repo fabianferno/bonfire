@@ -6,6 +6,7 @@ import {
   Flame, Sparkles, Bot, MessageSquare,
 } from 'lucide-react';
 import { bf } from '@/lib/api-bonfire';
+import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
 import { useAuth } from '@/components/auth/AuthProvider';
 import type { BackendAgent } from '@/lib/types';
 import InviteToServerModal from '@/components/marketplace/InviteToServerModal';
@@ -30,23 +31,10 @@ const TAG_BANNER: Record<string, string> = {
   generalist: 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)',
 };
 
-const TAG_COLOR: Record<string, string> = {
-  research: '#8116E0',
-  code: '#43b581',
-  finance: '#8116E0',
-  voice: '#8116E0',
-  generalist: '#8116E0',
-};
-
 function agentBanner(a: BackendAgent) {
   const tag = a.tags[0]?.toLowerCase() ?? '';
   return TAG_BANNER[tag] ?? 'linear-gradient(135deg,#0a0014 0%,#2a0060 50%,#8116E0 100%)';
 }
-function agentColor(a: BackendAgent) {
-  const tag = a.tags[0]?.toLowerCase() ?? '';
-  return TAG_COLOR[tag] ?? '#8116E0';
-}
-
 // ── Detail overlay ────────────────────────────────────────────────────────────
 
 function AgentDetailOverlay({
@@ -60,9 +48,7 @@ function AgentDetailOverlay({
   onInvite: (a: BackendAgent) => void;
   onMessage: (a: BackendAgent) => void;
 }) {
-  const [ssIdx, setSsIdx] = useState(0);
   const banner = agentBanner(agent);
-  const color = agentColor(agent);
 
   return (
     <div
@@ -84,10 +70,12 @@ function AgentDetailOverlay({
           >
             <X size={16} />
           </button>
-          {agent.avatarUrl
-            ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-6 translate-y-1/2 w-20 h-20 rounded-2xl border-4 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
-            : <div className="absolute bottom-0 left-6 translate-y-1/2 w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold text-white border-4" style={{ background: color, borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
-          }
+          <img
+            src={agentAvatarDisplayUrl(agent)}
+            alt=""
+            className="absolute bottom-0 left-6 translate-y-1/2 w-20 h-20 rounded-2xl border-4 object-cover bg-[var(--bf-quaternary)]"
+            style={{ borderColor: 'var(--bf-secondary)' }}
+          />
         </div>
 
         {/* Action bar */}
@@ -307,7 +295,7 @@ function MarketplaceInner() {
       agentId: a.id,
       agentName: a.name,
       agentSlug: a.slug,
-      agentAvatar: a.avatarUrl,
+      agentAvatar: agentAvatarDisplayUrl(a),
       agentBaseUrl: a.baseUrl,
       lastMessage: '',
       lastMessageAt: new Date().toISOString(),
@@ -376,10 +364,12 @@ function MarketplaceInner() {
                             onClick={() => setDetailAgent(agent)}
                           >
                             <div className="h-32 relative" style={{ background: agentBanner(agent) }}>
-                              {agent.avatarUrl
-                                ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
-                                : <div className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold text-white border-4" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
-                              }
+                              <img
+                                src={agentAvatarDisplayUrl(agent)}
+                                alt=""
+                                className="absolute bottom-0 left-4 translate-y-1/2 w-12 h-12 rounded-xl border-4 object-cover bg-[var(--bf-quaternary)]"
+                                style={{ borderColor: 'var(--bf-secondary)' }}
+                              />
                             </div>
                             <div className="pt-8 px-4 pb-4">
                               <div className="flex items-center gap-2 mb-1">
@@ -445,10 +435,12 @@ function MarketplaceInner() {
                           >
                             {/* Mini banner */}
                             <div className="h-16 relative" style={{ background: agentBanner(agent) }}>
-                              {agent.avatarUrl
-                                ? <img src={agent.avatarUrl} alt="" className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover" style={{ borderColor: 'var(--bf-secondary)' }} />
-                                : <div className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white border-2" style={{ background: agentColor(agent), borderColor: 'var(--bf-secondary)' }}>{agent.name[0]}</div>
-                              }
+                              <img
+                                src={agentAvatarDisplayUrl(agent)}
+                                alt=""
+                                className="absolute bottom-0 left-3 translate-y-1/2 w-9 h-9 rounded-lg border-2 object-cover bg-[var(--bf-quaternary)]"
+                                style={{ borderColor: 'var(--bf-secondary)' }}
+                              />
                             </div>
                             <div className="pt-7 px-4 pb-4 flex flex-col gap-2">
                               <div className="flex items-start justify-between">

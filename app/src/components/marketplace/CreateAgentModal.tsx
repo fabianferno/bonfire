@@ -23,6 +23,7 @@ import { api } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import { bf, type DiscoveredSkill } from '@/lib/api-bonfire';
 import type { BackendAgent } from '@/lib/types';
+import { identiconUrl } from '@/lib/agent-identicon';
 import Modal, { ModalLabel, ModalInput, ModalTextarea } from '@/components/shared/Modal';
 import SkillSearchPicker from '@/components/agent/SkillSearchPicker';
 import { MintProgress, type MintStep } from './MintProgress';
@@ -56,16 +57,6 @@ interface FieldErrors {
   name?: string;
   description?: string;
   soul?: string;
-}
-
-/**
- * Generate a deterministic identicon URL from the slug. Uses DiceBear's hosted
- * SVG API so we don't need to ship an avatar package — the slug seeds the
- * pattern, so the same handle always renders the same avatar.
- */
-function identiconUrl(slug: string): string {
-  const seed = encodeURIComponent(slug || 'agent');
-  return `https://api.dicebear.com/7.x/identicon/svg?seed=${seed}&backgroundColor=transparent`;
 }
 
 interface McpServerDraft {

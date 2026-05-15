@@ -104,7 +104,7 @@ export default function ServerSidebar() {
         <div className="mt-2"><WalletPanel serverId={activeServer.id} /></div>
 
         {/* Channel list */}
-        <div className="flex-1 overflow-y-auto px-2 py-2">
+        <div className="flex-1 overflow-y-auto px-2">
 
           {/* Text channels */}
           <ChannelCategory label="Text Channels" onAdd={() => { setNewChType("text"); setShowChannelModal(true); }} />
@@ -133,9 +133,9 @@ export default function ServerSidebar() {
                   <div key={p.userId} className="flex items-center gap-2 pl-8 pr-2 py-0.5 mb-0.5 rounded"
                     style={{ color: "var(--bf-gray)" }}>
                     <div className="relative flex-shrink-0">
-                      <Avatar name={p.userName} size={18} color="#6e86d6" />
+                      <Avatar name={p.userName} size={18} />
                       <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border"
-                        style={{ background: "var(--bf-accent)", borderColor: "var(--bf-secondary)" }} />
+                        style={{ background: "var(--bf-banana)", borderColor: "var(--bf-secondary)" }} />
                     </div>
                     <span className="text-xs truncate" style={{ color: "var(--bf-gray)" }}>
                       {p.userName.startsWith("did:") ? p.userName.slice(0, 14) + "…" : p.userName}
@@ -184,9 +184,9 @@ export default function ServerSidebar() {
         <div className="flex items-center justify-between px-2 py-2 flex-shrink-0" style={{ background: "var(--bf-quaternary)" }}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="relative flex-shrink-0">
-              <Avatar name={user.username} size={32} src={user.avatar} color="#6e86d6" />
+              <Avatar name={user.username} size={32} src={user.avatar} />
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2"
-                style={{ background: "var(--bf-accent)", borderColor: "var(--bf-quaternary)" }} />
+                style={{ background: "var(--bf-banana)", borderColor: "var(--bf-quaternary)" }} />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-white leading-none truncate">{user.username}</p>

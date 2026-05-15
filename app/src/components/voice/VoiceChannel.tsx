@@ -123,7 +123,7 @@ function ParticipantTile({
       className="flex flex-col items-center gap-3 p-5 rounded-2xl"
       style={{ background: "var(--bf-secondary)" }}
     >
-      <Avatar name={participant.userName} size={64} color="#6e86d6" />
+      <Avatar name={participant.userName} size={64} />
 
       <p className="text-white text-sm font-semibold truncate max-w-full">
         {participant.userName}

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { Agent } from "@/context/AppContext";
 import Avatar from "@/components/shared/Avatar";
+import { appAgentAvatarSrc } from "@/lib/agent-identicon";
 import AgentProfileModal from "./AgentProfileModal";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -29,8 +30,7 @@ export default function AgentSidebarRow({ agent }: { agent: Agent }) {
             name={agent.name}
             size={36}
             emoji={agent.emoji}
-            color={agent.avatar?.startsWith("#") ? agent.avatar : "#6e86d6"}
-            src={agent.avatar?.startsWith("#") ? undefined : agent.avatar}
+            src={appAgentAvatarSrc(agent)}
           />
           {/* Presence dot — circle with white border, positioned bottom-right */}
           <span

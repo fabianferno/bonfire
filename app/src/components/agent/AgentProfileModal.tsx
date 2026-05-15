@@ -4,6 +4,7 @@ import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, 
 import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
+import { appAgentAvatarSrc } from "@/lib/agent-identicon";
 import SkillManager from "./SkillManager";
 import { bf, type McpServerConfig } from "@/lib/api-bonfire";
 import { ModalLabel, ModalInput } from "@/components/shared/Modal";
@@ -33,8 +34,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
             name={agent.name}
             emoji={agent.emoji}
             size={64}
-            color={agent.avatar?.startsWith("#") ? agent.avatar : "#6e86d6"}
-            src={agent.avatar?.startsWith("#") ? undefined : agent.avatar}
+            src={appAgentAvatarSrc(agent)}
           />
           <span
             className="absolute rounded-full"

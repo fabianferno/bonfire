@@ -67,6 +67,17 @@ function PriceLabel({ agent }: { agent: BackendAgent }) {
 
 // ── Detail overlay ────────────────────────────────────────────────────────────
 
+interface AgentEarnings {
+  totalEarnedOg: string;
+  paidInviteCount: number;
+  events: Array<{
+    serverId: string;
+    amount: string;
+    txHash: string | null;
+    joinedAt: string;
+  }>;
+}
+
 function AgentDetailOverlay({
   agent,
   onClose,
@@ -80,6 +91,33 @@ function AgentDetailOverlay({
 }) {
   const agentPrice = parseFloat(agent.priceOg ?? '0');
   const priced = Number.isFinite(agentPrice) && agentPrice > 0;
+
+  // Lifetime invite earnings for the agent (public; no auth needed).
+  const [earnings, setEarnings] = useState<AgentEarnings | null>(null);
+  const [earningsLoading, setEarningsLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setEarningsLoading(true);
+    bf.getAgentEarnings(agent.slug)
+      .then((r) => {
+        if (cancelled) return;
+        setEarnings({
+          totalEarnedOg: r.totalEarnedOg,
+          paidInviteCount: r.paidInviteCount,
+          events: r.events.map((e) => ({
+            serverId: e.serverId,
+            amount: e.amount,
+            txHash: e.txHash,
+            joinedAt: e.joinedAt,
+          })),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setEarnings({ totalEarnedOg: '0.0', paidInviteCount: 0, events: [] });
+      })
+      .finally(() => { if (!cancelled) setEarningsLoading(false); });
+    return () => { cancelled = true; };
+  }, [agent.slug]);
 
   return (
     <div
@@ -172,7 +210,7 @@ function AgentDetailOverlay({
           </div>
 
           {/* Right sidebar */}
-          <div className="w-56 flex-shrink-0 px-4 pt-6 pb-6 overflow-y-auto border-l flex flex-col gap-4" style={{ borderColor: 'var(--bf-quaternary)' }}>
+          <div className="w-64 flex-shrink-0 px-4 pt-6 pb-6 overflow-y-auto border-l flex flex-col gap-5" style={{ borderColor: 'var(--bf-quaternary)' }}>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--bf-gray)' }}>Details</p>
               <div className="flex flex-col gap-2">
@@ -183,6 +221,54 @@ function AgentDetailOverlay({
                   value={priced ? `${agent.priceOg} OG` : 'Free'}
                   color={priced ? '#fbbf24' : '#43b581'}
                 />
+              </div>
+            </div>
+
+            {/* ── Earnings panel ─────────────────────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--bf-gray)' }}>
+                Earnings
+              </p>
+              <div
+                className="rounded-lg p-3"
+                style={{ background: 'var(--bf-quaternary)' }}
+              >
+                {earningsLoading ? (
+                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>Loading…</p>
+                ) : earnings && earnings.paidInviteCount > 0 ? (
+                  <>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-bold" style={{ color: '#fbbf24' }}>
+                        {earnings.totalEarnedOg}
+                      </span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--bf-gray)' }}>OG</span>
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+                      {earnings.paidInviteCount} paid invite{earnings.paidInviteCount === 1 ? '' : 's'}
+                    </p>
+                    {earnings.events.length > 0 && (
+                      <div className="mt-3 flex flex-col gap-1.5 pt-2" style={{ borderTop: '1px solid var(--bf-quinary)' }}>
+                        {earnings.events.slice(0, 5).map((ev) => (
+                          <div key={`${ev.serverId}-${ev.joinedAt}`} className="flex items-center justify-between gap-2">
+                            <span className="text-xs truncate" style={{ color: 'var(--bf-gray)' }}>
+                              {new Date(ev.joinedAt).toLocaleDateString()}
+                            </span>
+                            <span className="text-xs font-semibold tabular-nums" style={{ color: 'white' }}>
+                              +{ev.amount} OG
+                            </span>
+                          </div>
+                        ))}
+                        {earnings.events.length > 5 && (
+                          <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
+                            + {earnings.events.length - 5} earlier
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>No paid invites yet.</p>
+                )}
               </div>
             </div>
           </div>

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ObjectId } from 'mongodb';
 import type { Db } from 'mongodb';
 import { randomBytes as nodeRandomBytes } from 'node:crypto';
-import { keccak256 } from 'ethers';
+import { keccak256, parseEther, formatEther } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { requireUser, type AuthBindings } from '../../auth/middleware.js';
 import {
@@ -74,6 +74,48 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
     return c.json({ agent: publicAgent(a) });
+  });
+
+  /**
+   * GET /v1/agents/:aid/earnings
+   *
+   * Returns the agent's lifetime invite earnings — every paid `serverMember`
+   * row whose `principalId === agent._id` contributes one event. The amount
+   * is the per-server invite price the buyer paid (decimal OG string).
+   *
+   * Public: anyone can see what an agent has earned (marketplace transparency).
+   */
+  app.get('/v1/agents/:aid/earnings', async (c) => {
+    const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
+    if (!a) return c.json({ error: 'not_found' }, 404);
+
+    const rows = await deps.db.collection(collections.serverMembers)
+      .find({ principalType: 'agent', principalId: a._id, paidAmount: { $exists: true } })
+      .sort({ joinedAt: -1 })
+      .toArray();
+
+    let totalWei = 0n;
+    const events = rows.map((r) => {
+      let amountWei = 0n;
+      try { amountWei = parseEther(String(r.paidAmount ?? '0')); } catch { /* ignore */ }
+      totalWei += amountWei;
+      return {
+        serverId: r.serverId.toHexString(),
+        amount: String(r.paidAmount ?? '0'),
+        txHash: r.paidTxHash ?? null,
+        paidByUserId: r.paidByUserId?.toHexString?.() ?? null,
+        joinedAt: r.joinedAt instanceof Date ? r.joinedAt.toISOString() : new Date(r.joinedAt).toISOString(),
+      };
+    });
+
+    return c.json({
+      agentSlug: a.slug,
+      ownerWallet: a.ownerWallet ?? null,
+      priceOg: a.priceOg ?? '0',
+      totalEarnedOg: formatEther(totalWei),
+      paidInviteCount: rows.length,
+      events,
+    });
   });
 
   app.post('/v1/agents', requireAuth, async (c) => {

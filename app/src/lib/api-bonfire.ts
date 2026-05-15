@@ -95,6 +95,26 @@ export const bf = {
   getAgent: (aidOrSlug: string) =>
     api<{ agent: BackendAgent }>('GET', `/v1/agents/${aidOrSlug}`),
 
+  /**
+   * Lifetime invite earnings for an agent — sum of every paid serverMember row.
+   * Public (no auth).
+   */
+  getAgentEarnings: (aidOrSlug: string) =>
+    api<{
+      agentSlug: string;
+      ownerWallet: string | null;
+      priceOg: string;
+      totalEarnedOg: string;
+      paidInviteCount: number;
+      events: Array<{
+        serverId: string;
+        amount: string;
+        txHash: string | null;
+        paidByUserId: string | null;
+        joinedAt: string;
+      }>;
+    }>('GET', `/v1/agents/${aidOrSlug}/earnings`, undefined, { auth: false }),
+
   createAgent: (body: {
     name: string;
     slug: string;

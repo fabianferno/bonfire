@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
-import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2 } from "lucide-react";
+import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2, Sparkles } from "lucide-react";
 import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
 import SkillManager from "./SkillManager";
 import { bf, type McpServerConfig } from "@/lib/api-bonfire";
 import { ModalLabel, ModalInput } from "@/components/shared/Modal";
+import { MCP_PRESETS, type McpPreset } from "./mcp-presets";
 
 const STATUS_COLOR: Record<string, string> = {
   online:  "var(--bf-accent)",
@@ -189,6 +190,22 @@ function McpManager({ agentId }: { agentId: string }) {
     }
   };
 
+  const applyPreset = (preset: McpPreset) => {
+    let id = preset.id;
+    let n = 2;
+    while (servers[id]) {
+      id = `${preset.id}-${n++}`;
+    }
+    setForm({
+      id,
+      command: preset.command,
+      args: preset.args,
+      env: preset.envHints ?? "",
+    });
+    setFormErrors({});
+    setShowForm(true);
+  };
+
   const handleRemove = async (id: string) => {
     setRemoving(id);
     setError(null);
@@ -346,14 +363,53 @@ function McpManager({ agentId }: { agentId: string }) {
       )}
 
       {!showForm && (
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors self-start"
-          style={{ background: "var(--bf-quaternary)", color: "var(--bf-accent)", border: "1px dashed var(--bf-accent)" }}
-        >
-          <Plus size={14} />
-          Add MCP Server
-        </button>
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5" style={{ color: "var(--bf-gray)" }}>
+              <Sparkles size={11} /> Suggested servers
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {MCP_PRESETS.map(p => {
+                const added = !!servers[p.id] || Object.keys(servers).some(k => k.startsWith(p.id + "-"));
+                const tooltip = p.archived
+                  ? `${p.description}\n\nNote: package is archived but still works.`
+                  : p.description;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    title={tooltip}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-full transition-colors"
+                    style={{
+                      background: added ? "rgba(110,134,214,0.18)" : "var(--bf-tertiary)",
+                      color: added ? "var(--bf-accent)" : "var(--bf-white)",
+                      border: `1px solid ${added ? "var(--bf-accent)" : "var(--bf-quinary)"}`,
+                    }}
+                  >
+                    {added && <span style={{ color: "var(--bf-accent)" }}>✓</span>}
+                    {p.name}
+                    {p.archived && (
+                      <span
+                        className="rounded-full"
+                        style={{ width: 5, height: 5, background: "#fbbf24", display: "inline-block" }}
+                        aria-label="archived package"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors self-start"
+            style={{ background: "var(--bf-quaternary)", color: "var(--bf-accent)", border: "1px dashed var(--bf-accent)" }}
+          >
+            <Plus size={14} />
+            Add custom server
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { BF_BRAND_EMOJI } from "@/lib/brand";
 
 export default function LandingPage() {
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center" style={{ background: "var(--bf-tertiary)" }}>
-      <img src="/logo.png" alt="BonFire" className="mb-6 w-28 h-28 object-cover" style={{ borderRadius: "30%" }} />
+      <span
+        className="mb-6 text-[7rem] leading-none select-none flex items-center justify-center"
+        style={{ width: "7rem", height: "7rem" }}
+        role="img"
+        aria-label="BonFire"
+      >
+        {BF_BRAND_EMOJI}
+      </span>
       <h1 className="text-5xl font-bold text-white mb-3 tracking-tight">BonFire</h1>
       <p className="text-lg mb-2 max-w-md" style={{ color: "var(--bf-gray)" }}>
         A Discord-style workspace for orchestrating teams of AI agents.

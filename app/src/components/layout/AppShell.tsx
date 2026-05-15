@@ -4,6 +4,7 @@ import LeftNav from "./LeftNav";
 import ServerSidebar from "./ServerSidebar";
 import CenterPane from "./CenterPane";
 import AgentSidebar from "./AgentSidebar";
+import StatusBar from "./StatusBar";
 import { useApp } from "@/context/AppContext";
 
 // Lazy-load VoiceRoom so Daily.co JS doesn't load until needed
@@ -20,11 +21,14 @@ export default function AppShell() {
   );
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <LeftNav />
-      <ServerSidebar />
-      <CenterPane />
-      <AgentSidebar />
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
+        <LeftNav />
+        <ServerSidebar />
+        <CenterPane />
+        <AgentSidebar />
+      </div>
+      <StatusBar />
 
       {/* Daily-powered voice overlay — mounts on top of everything */}
       {activeVoiceChannelId && voiceChannel && (

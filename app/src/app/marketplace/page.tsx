@@ -331,7 +331,7 @@ function MarketplaceInner() {
           <div className="relative flex-shrink-0" style={{ background: 'var(--bf-brand-hero-gradient)' }}>
             <div className="px-10 pt-8 pb-10 flex items-end justify-between">
               <div>
-                <h1 className="font-display text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
+                <h1 className="font-display !font-normal text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
                   FIND YOUR AGENT<br />ON BONFIRE
                 </h1>
                 <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>

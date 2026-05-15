@@ -5,6 +5,7 @@ import { useApp } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import WalletFundingModal from "@/components/server/WalletFundingModal";
 import type { BackendServerWallet, BackendServerFunding } from "@/lib/types";
+import { BF_BRAND_EMOJI } from "@/lib/brand";
 
 const SERVER_COLORS = ["#f97316", "var(--bf-fire)", "var(--bf-accent)", "#f04747", "#faa61a", "#6633cc", "#00d8ff", "#ed1b24"];
 
@@ -85,10 +86,10 @@ export default function LeftNav() {
           <button
             onClick={() => router.push("/")}
             title="BonFire"
-            className="mx-auto flex items-center justify-center transition-all duration-150 overflow-hidden"
-            style={{ width: 48, height: 48, borderRadius: "30%", background: "var(--bf-secondary)" }}
+            className="mx-auto flex bg-lime-950 items-center justify-center transition-all duration-150 overflow-hidden text-[1.75rem] leading-none select-none"
+            style={{ width: 48, height: 48, borderRadius: "30%" }}
           >
-            <img src="/logo.png" alt="BonFire" className="w-12 h-12 object-cover" />
+            <span role="img" aria-label="BonFire">{BF_BRAND_EMOJI}</span>
           </button>
         </div>
 

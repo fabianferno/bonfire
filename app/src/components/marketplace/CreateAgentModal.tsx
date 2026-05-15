@@ -15,7 +15,8 @@
 
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { MCP_PRESETS, type McpPreset } from '@/components/agent/mcp-presets';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useMintAgent } from '@/lib/inft';
 import { api } from '@/lib/api';
@@ -43,7 +44,6 @@ interface FormFields {
   slug: string;
   name: string;
   description: string;
-  avatarUrl: string;
   tags: string;
   soul: string;
   agents: string;
@@ -55,8 +55,17 @@ interface FieldErrors {
   slug?: string;
   name?: string;
   description?: string;
-  avatarUrl?: string;
   soul?: string;
+}
+
+/**
+ * Generate a deterministic identicon URL from the slug. Uses DiceBear's hosted
+ * SVG API so we don't need to ship an avatar package — the slug seeds the
+ * pattern, so the same handle always renders the same avatar.
+ */
+function identiconUrl(slug: string): string {
+  const seed = encodeURIComponent(slug || 'agent');
+  return `https://api.dicebear.com/7.x/identicon/svg?seed=${seed}&backgroundColor=transparent`;
 }
 
 interface McpServerDraft {
@@ -74,17 +83,21 @@ const EMPTY_MCP: McpServerDraft = { id: '', command: '', args: '', env: '' };
 
 const SLUG_RE = /^[a-z0-9_-]{3,32}$/;
 
+/** Generate a URL-safe slug from a display name. */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+  // Pad to meet the 3-char minimum so validation passes for short names.
+  return base.length >= 3 ? base : base ? `${base}-agent`.slice(0, 32) : '';
+}
+
 /** Field labels in this modal use brand plum (see `globals.css` --bf-plum). */
 const CREATE_AGENT_LABEL_STYLE = { color: "var(--bf-plum)" } as const;
-
-function isValidUrl(s: string): boolean {
-  try {
-    new URL(s);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function validate(f: FormFields): FieldErrors {
   const errs: FieldErrors = {};
@@ -97,9 +110,6 @@ function validate(f: FormFields): FieldErrors {
   }
   if (!f.description.trim() || f.description.length > 200) {
     errs.description = 'Description is required and must be under 200 characters.';
-  }
-  if (f.avatarUrl.trim() && !isValidUrl(f.avatarUrl.trim())) {
-    errs.avatarUrl = 'Must be a valid URL (e.g. https://…)';
   }
   if (!f.soul.trim()) {
     errs.soul = "SOUL is required — describe the agent's personality.";
@@ -122,7 +132,6 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
     slug: '',
     name: '',
     description: '',
-    avatarUrl: '',
     tags: '',
     soul: '',
     agents: '',
@@ -138,6 +147,8 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   // Generic field updater that also clears the field-level error on change.
+  // When the name changes, also auto-regenerate the slug so users don't have
+  // to think about it — the slug field is hidden in the UI.
   const set =
     (key: keyof FormFields) =>
     (
@@ -145,9 +156,17 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
       >,
     ) => {
-      setFields((prev) => ({ ...prev, [key]: e.target.value }));
+      const value = e.target.value;
+      setFields((prev) =>
+        key === 'name'
+          ? { ...prev, name: value, slug: slugify(value) }
+          : { ...prev, [key]: value },
+      );
       if (key in fieldErrors) {
         setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+      }
+      if (key === 'name' && fieldErrors.slug) {
+        setFieldErrors((prev) => ({ ...prev, slug: undefined }));
       }
     };
 
@@ -168,6 +187,29 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
   };
 
   const removeMcpDraft = (id: string) => setMcpServers(prev => prev.filter(s => s.id !== id));
+
+  /**
+   * Apply a preset to the inline form. We always open the form (rather than
+   * adding directly) so the user can review/edit env values and args before
+   * committing — important because most presets either need a path arg or a
+   * secret to be useful.
+   */
+  const applyPreset = (preset: McpPreset) => {
+    // De-dup id: if the user has already added this preset, suffix with a number.
+    let id = preset.id;
+    let n = 2;
+    while (mcpServers.some(s => s.id === id)) {
+      id = `${preset.id}-${n++}`;
+    }
+    setMcpForm({
+      id,
+      command: preset.command,
+      args: preset.args,
+      env: preset.envHints ?? '',
+    });
+    setMcpFormErrors({});
+    setShowMcpForm(true);
+  };
 
   // ------------------------------------------------------------------
   // Mint submit handler
@@ -205,7 +247,7 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
         slug: fields.slug,
         name: fields.name.trim(),
         description: fields.description.trim(),
-        avatarUrl: fields.avatarUrl.trim() || undefined,
+        avatarUrl: identiconUrl(fields.slug),
         tags: tags.length > 0 ? tags : undefined,
         soul: fields.soul.trim(),
         agents: fields.agents.trim() || undefined,
@@ -366,31 +408,8 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {/* ── Two-column identity fields ───────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Slug */}
-          <div>
-            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
-              Slug <span style={{ color: 'var(--bf-fire)' }}>*</span>
-            </ModalLabel>
-            <ModalInput
-              type="text"
-              value={fields.slug}
-              onChange={set('slug')}
-              placeholder="my-agent"
-              pattern="[a-z0-9_\-]{3,32}"
-              autoComplete="off"
-            />
-            <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
-              Used as @handle in mentions
-            </p>
-            {fieldErrors.slug && (
-              <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm mt-1">
-                {fieldErrors.slug}
-              </p>
-            )}
-          </div>
-
-          {/* Name */}
-          <div>
+          {/* Name (slug is auto-generated from this) */}
+          <div className="sm:col-span-2">
             <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>
               Name <span style={{ color: 'var(--bf-fire)' }}>*</span>
             </ModalLabel>
@@ -404,10 +423,21 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
             />
             <p className="text-xs mt-1" style={{ color: 'var(--bf-gray)' }}>
               Display name in the marketplace
+              {fields.slug && (
+                <>
+                  {' · '}@handle:{' '}
+                  <code style={{ color: 'var(--bf-accent)' }}>{fields.slug}</code>
+                </>
+              )}
             </p>
             {fieldErrors.name && (
               <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm mt-1">
                 {fieldErrors.name}
+              </p>
+            )}
+            {fieldErrors.slug && (
+              <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm mt-1">
+                {fieldErrors.slug}
               </p>
             )}
           </div>
@@ -435,21 +465,25 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
             )}
           </div>
 
-          {/* Avatar URL */}
+          {/* Avatar — auto-generated identicon seeded by the slug */}
           <div>
-            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Avatar URL</ModalLabel>
-            <ModalInput
-              type="url"
-              value={fields.avatarUrl}
-              onChange={set('avatarUrl')}
-              placeholder="https://example.com/avatar.png"
-              autoComplete="off"
-            />
-            {fieldErrors.avatarUrl && (
-              <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm mt-1">
-                {fieldErrors.avatarUrl}
+            <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Avatar</ModalLabel>
+            <div className="flex items-center gap-3">
+              <div
+                className="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+                style={{ background: 'var(--bf-tertiary)', border: '1px solid var(--bf-quinary)' }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={identiconUrl(fields.slug)}
+                  alt=""
+                  className="w-full h-full"
+                />
+              </div>
+              <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
+                Auto-generated identicon, seeded from your handle. Updates as you type the name.
               </p>
-            )}
+            </div>
           </div>
 
           {/* Tags */}
@@ -586,14 +620,53 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
             )}
 
             {!showMcpForm && (
-              <button
-                type="button"
-                onClick={() => setShowMcpForm(true)}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors"
-                style={{ background: 'var(--bf-tertiary)', color: 'var(--bf-accent)', border: '1px dashed var(--bf-accent)' }}
-              >
-                <Plus size={13} /> Add MCP Server
-              </button>
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--bf-gray)' }}>
+                    <Sparkles size={11} /> Suggested servers
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {MCP_PRESETS.map(p => {
+                      const added = mcpServers.some(s => s.id === p.id || s.id.startsWith(p.id + '-'));
+                      const tooltip = p.archived
+                        ? `${p.description}\n\nNote: package is archived but still works.`
+                        : p.description;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => applyPreset(p)}
+                          title={tooltip}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-full transition-colors"
+                          style={{
+                            background: added ? 'rgba(110,134,214,0.18)' : 'var(--bf-tertiary)',
+                            color: added ? 'var(--bf-accent)' : 'var(--bf-white)',
+                            border: `1px solid ${added ? 'var(--bf-accent)' : 'var(--bf-quinary)'}`,
+                          }}
+                        >
+                          {added && <span style={{ color: 'var(--bf-accent)' }}>✓</span>}
+                          {p.name}
+                          {p.archived && (
+                            <span
+                              className="rounded-full"
+                              style={{ width: 5, height: 5, background: '#fbbf24', display: 'inline-block' }}
+                              aria-label="archived package"
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMcpForm(true)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition-colors self-start"
+                  style={{ background: 'var(--bf-tertiary)', color: 'var(--bf-accent)', border: '1px dashed var(--bf-accent)' }}
+                >
+                  <Plus size={13} /> Add custom server
+                </button>
+              </div>
             )}
           </div>
         </div>

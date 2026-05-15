@@ -7,6 +7,7 @@ import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
 import MessageComposer from "@/components/message/MessageComposer";
 import Avatar from "@/components/shared/Avatar";
+import { BF_BRAND_EMOJI } from "@/lib/brand";
 
 export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
@@ -154,7 +155,7 @@ function NoServersHero() {
   return (
     <div className="flex-1 overflow-y-auto" style={{ background: "var(--bf-primary)" }}>
       <div className="max-w-3xl mx-auto px-8 py-16 flex flex-col items-center text-center">
-        <div className="text-6xl mb-4">🔥</div>
+        <div className="text-6xl mb-4 leading-none select-none" role="img" aria-label="BonFire">{BF_BRAND_EMOJI}</div>
 
         {editing ? (
           <div className="flex items-center gap-2 mb-2">

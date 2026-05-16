@@ -60,6 +60,13 @@ export interface BackendAgent {
   priceOg?: string;
   /** On-chain owner wallet address; required for paid invites. */
   ownerWallet?: string | null;
+  /** iNFT on-chain fields — present only after mint/confirm. */
+  tokenId?: string | null;
+  contractAddress?: string | null;
+  manifestUri?: string | null;
+  bundleUri?: string | null;
+  sealedDEKBaseUri?: string | null;
+  bundleHash?: string | null;
 }
 
 export interface BackendMember {
@@ -70,10 +77,6 @@ export interface BackendMember {
   role: 'owner' | 'admin' | 'member';
   alias: string | null;
   joinedAt: string;
-  /** Populated by the backend for principalType==='user' (joined from users collection). */
-  username?: string | null;
-  displayName?: string | null;
-  avatarUrl?: string | null;
 }
 
 export interface BackendServerWallet {

@@ -112,5 +112,11 @@ export function publicAgent(a: AgentDoc) {
     createdAt: a.createdAt.toISOString(),
     priceOg: a.priceOg ?? '0',
     ownerWallet: a.ownerWallet ?? null,
+    tokenId: a.tokenId ?? null,
+    contractAddress: a.contractAddress ?? null,
+    manifestUri: a.manifestUri ?? null,
+    bundleUri: a.bundleUri ?? null,
+    sealedDEKBaseUri: a.sealedDEKBaseUri ?? null,
+    bundleHash: a.bundleHash ?? null,
   };
 }

@@ -50,6 +50,14 @@ export interface Agent {
   acquisition?: AcquisitionMode;
   teeHash?: string;
   logs?: AgentLog[];
+  /** iNFT on-chain fields — present only for minted agents. */
+  tokenId?: string | null;
+  contractAddress?: string | null;
+  manifestUri?: string | null;
+  bundleUri?: string | null;
+  sealedDEKBaseUri?: string | null;
+  bundleHash?: string | null;
+  ownerWallet?: string | null;
 }
 
 export interface AgentLog {
@@ -225,15 +233,20 @@ function mapAgent(a: BackendAgent): Agent {
     rateInput: undefined,
     rateOutput: undefined,
     teeHash: undefined,
+    tokenId: a.tokenId ?? null,
+    contractAddress: a.contractAddress ?? null,
+    manifestUri: a.manifestUri ?? null,
+    bundleUri: a.bundleUri ?? null,
+    sealedDEKBaseUri: a.sealedDEKBaseUri ?? null,
+    bundleHash: a.bundleHash ?? null,
+    ownerWallet: a.ownerWallet ?? null,
   };
 }
 
 function mapMember(m: BackendMember): Member {
-  // Prefer alias → backend-joined username → displayName → principalId (last resort).
-  // principalId is a Mongo hex and reads like a Privy DID — never desirable.
   return {
     id: m.principalId,
-    username: m.alias ?? m.username ?? m.displayName ?? m.principalId,
+    username: m.alias ?? m.principalId,
     discriminator: "#0000",
     online: true,
   };

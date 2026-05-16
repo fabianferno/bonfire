@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
-import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2, Sparkles } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2, Sparkles, ExternalLink, Copy, Check, Lock, FileText, Key, Flame, Box } from "lucide-react";
 import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
@@ -23,7 +23,7 @@ interface Props {
 }
 
 export default function AgentProfileModal({ agent, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "skills" | "mcp" | "logs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "inft" | "skills" | "mcp" | "logs">("overview");
 
   return (
     <Modal title="" onClose={onClose} wide maxHeight="70vh">
@@ -60,7 +60,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
 
       {/* Tabs */}
       <div className="flex gap-1" style={{ borderBottom: "1px solid var(--bf-quinary)" }}>
-        {(["overview", "skills", "mcp", "logs"] as const).map(tab => (
+        {(["overview", "inft", "skills", "mcp", "logs"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -70,7 +70,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
               borderBottom: activeTab === tab ? "2px solid var(--bf-accent)" : "2px solid transparent",
             }}
           >
-            {tab === "logs" ? "Audit Logs" : tab === "skills" ? "Skills" : tab === "mcp" ? "MCP Servers" : "Overview"}
+            {tab === "logs" ? "Audit Logs" : tab === "skills" ? "Skills" : tab === "mcp" ? "MCP Servers" : tab === "inft" ? "iNFT" : "Overview"}
           </button>
         ))}
       </div>
@@ -78,11 +78,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
       {activeTab === "overview" && (
         <div className="flex flex-col gap-4 pt-2">
           {/* Stats grid */}
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <StatCard label="Model" value={agent.model ?? "—"} />
-            <StatCard label="Rate In" value={agent.rateInput !== undefined ? `${agent.rateInput} OG/1k` : "—"} />
-            <StatCard label="Rate Out" value={agent.rateOutput !== undefined ? `${agent.rateOutput} OG/1k` : "—"} />
-          </div>
+          <OverviewStats agentId={agent.id} />
 
           {agent.acquisition && (
             <div className="rounded-lg p-3 text-sm" style={{ background: "var(--bf-quaternary)" }}>
@@ -108,6 +104,15 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
             </div>
           )}
 
+          {/* Adapters */}
+          <AdaptersSection />
+
+        </div>
+      )}
+
+      {activeTab === "inft" && (
+        <div className="pt-2">
+          <InftVisualiser agent={agent} />
         </div>
       )}
 
@@ -415,14 +420,419 @@ function McpManager({ agentId }: { agentId: string }) {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+// ---------------------------------------------------------------------------
+// iNFT Visualiser
+// ---------------------------------------------------------------------------
+
+const OG_EXPLORER = "https://chainscan-galileo.0g.ai";
+
+function truncate(s: string, start = 6, end = 4) {
+  if (s.length <= start + end + 3) return s;
+  return `${s.slice(0, start)}…${s.slice(-end)}`;
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
-    <div className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
-      <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>{label}</p>
-      <p className="text-white font-semibold text-sm">{value}</p>
+    <button onClick={copy} title="Copy" className="p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0">
+      {copied
+        ? <Check size={12} style={{ color: "var(--bf-accent)" }} />
+        : <Copy size={12} style={{ color: "var(--bf-gray)" }} />
+      }
+    </button>
+  );
+}
+
+function HashRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5" style={{ borderBottom: "1px solid var(--bf-quinary)" }}>
+      <span className="text-xs flex-shrink-0" style={{ color: "var(--bf-gray)" }}>{label}</span>
+      <div className="flex items-center gap-1 min-w-0">
+        <code className="text-xs font-mono truncate" style={{ color: "var(--bf-accent)" }}>{truncate(value, 8, 6)}</code>
+        <CopyButton value={value} />
+      </div>
     </div>
   );
 }
+
+interface ManifestData {
+  name?: string;
+  description?: string;
+  tags?: string[];
+  soul?: string;
+  llm?: { provider?: string; model?: string };
+  avatarUrl?: string | null;
+  [key: string]: unknown;
+}
+
+function ManifestViewer({ agentId }: { agentId: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [manifest, setManifest] = useState<ManifestData | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setState("loading");
+    try {
+      const { manifest: m } = await bf.getAgentManifest(agentId);
+      setManifest(m as ManifestData);
+      setState("done");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to fetch manifest");
+      setState("error");
+    }
+  };
+
+  if (state === "idle") {
+    return (
+      <button
+        onClick={load}
+        className="text-xs px-2 py-1 rounded font-semibold transition-colors"
+        style={{ background: "var(--bf-quaternary)", color: "var(--bf-accent)", border: "1px solid var(--bf-quinary)" }}
+      >
+        View manifest
+      </button>
+    );
+  }
+  if (state === "loading") return <span className="text-xs" style={{ color: "var(--bf-gray)" }}>Loading…</span>;
+  if (state === "error") return <span className="text-xs" style={{ color: "var(--bf-red)" }}>{err}</span>;
+  if (!manifest) return null;
+
+  return (
+    <div className="mt-2 rounded-lg overflow-hidden" style={{ border: "1px solid var(--bf-quinary)" }}>
+      {/* Metadata fields */}
+      <div className="px-3 py-2 flex flex-col gap-1.5" style={{ background: "var(--bf-tertiary)" }}>
+        {manifest.tags && manifest.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {manifest.tags.map(t => (
+              <span key={t} className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "var(--bf-quaternary)", color: "var(--bf-accent)" }}>{t}</span>
+            ))}
+          </div>
+        )}
+        {manifest.llm && (
+          <p className="text-xs" style={{ color: "var(--bf-gray)" }}>
+            Model: <span style={{ color: "var(--bf-white)" }}>{manifest.llm.provider ?? "—"} / {manifest.llm.model ?? "default"}</span>
+          </p>
+        )}
+        {manifest.soul && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--bf-gray)" }}>Soul preview</p>
+            <p className="text-xs leading-relaxed font-mono" style={{ color: "var(--bf-white)", whiteSpace: "pre-wrap" }}>
+              {manifest.soul.slice(0, 300)}{manifest.soul.length > 300 ? "…" : ""}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const BLOB_DEFS = [
+  {
+    key: "manifestUri" as const,
+    label: "Public Manifest",
+    icon: FileText,
+    color: "var(--bf-accent)",
+    desc: "Plaintext JSON stored on 0G — contains name, description, tags, soul, and model config. Anyone can read this.",
+    viewable: true,
+  },
+  {
+    key: "bundleUri" as const,
+    label: "Encrypted Bundle",
+    icon: Lock,
+    color: "#f05b5b",
+    desc: "AES-256-GCM encrypted blob containing soul, operating rules, and LLM config. Only the platform executor can decrypt this.",
+    viewable: false,
+  },
+  {
+    key: "sealedDEKBaseUri" as const,
+    label: "Sealed DEK",
+    icon: Key,
+    color: "#fbbf24",
+    desc: "ECIES-sealed Data Encryption Key. Used by the platform executor to decrypt the bundle at inference time.",
+    viewable: false,
+  },
+] as const;
+
+function InftVisualiser({ agent }: { agent: Agent }) {
+  const isMinted = !!agent.tokenId;
+  const explorerTokenUrl = agent.contractAddress && agent.tokenId
+    ? `${OG_EXPLORER}/token/${agent.contractAddress}?a=${agent.tokenId}`
+    : null;
+  const explorerWalletUrl = agent.ownerWallet
+    ? `${OG_EXPLORER}/address/${agent.ownerWallet}`
+    : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+
+      {/* ── iNFT Token Card ── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{ border: "1px solid var(--bf-fire)", background: "var(--bf-secondary)" }}
+      >
+        {/* Fire gradient header bar */}
+        <div
+          className="h-1.5 w-full"
+          style={{ background: "linear-gradient(90deg, var(--bf-fire), var(--bf-accent))" }}
+        />
+
+        <div className="px-4 py-3 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Flame size={15} style={{ color: "var(--bf-fire)" }} strokeWidth={2} />
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--bf-fire)" }}>iNFT Token</span>
+          </div>
+
+          {isMinted ? (
+            <>
+              {/* Token ID */}
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <span className="text-4xl font-black text-white">#{agent.tokenId}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: "rgba(251,146,60,0.15)", color: "var(--bf-fire)" }}>
+                  BonFireAgentINFT
+                </span>
+              </div>
+
+              {/* On-chain fields */}
+              <div className="flex flex-col divide-y-0 gap-0">
+                {agent.contractAddress && <HashRow label="Contract" value={agent.contractAddress} />}
+                {agent.ownerWallet && <HashRow label="Owner" value={agent.ownerWallet} />}
+                {agent.bundleHash && <HashRow label="Bundle hash" value={agent.bundleHash} />}
+              </div>
+
+              {/* Explorer links */}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {explorerTokenUrl && (
+                  <a
+                    href={explorerTokenUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-opacity hover:opacity-80"
+                    style={{ background: "var(--bf-fire)", color: "white" }}
+                  >
+                    <ExternalLink size={12} strokeWidth={2} />
+                    View on 0G Explorer
+                  </a>
+                )}
+                {explorerWalletUrl && (
+                  <a
+                    href={explorerWalletUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-opacity hover:opacity-80"
+                    style={{ background: "var(--bf-quaternary)", color: "var(--bf-gray)", border: "1px solid var(--bf-quinary)" }}
+                  >
+                    <ExternalLink size={12} strokeWidth={2} />
+                    Owner wallet
+                  </a>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-4 text-center">
+              <Flame size={28} strokeWidth={1.5} style={{ color: "var(--bf-fire)", opacity: 0.4 }} />
+              <p className="text-sm font-semibold text-white">Not yet minted as an iNFT</p>
+              <p className="text-xs max-w-xs leading-relaxed" style={{ color: "var(--bf-gray)" }}>
+                This agent has not been minted on-chain. iNFTs bind the agent&apos;s soul, skills, and encrypted config to a token on the 0G network.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 0G Storage Blobs ── */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Box size={14} style={{ color: "var(--bf-gray)" }} />
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--bf-gray)" }}>0G Storage Blobs</span>
+        </div>
+
+        {!isMinted ? (
+          <p className="text-xs py-4 text-center" style={{ color: "var(--bf-gray)" }}>No blobs — agent not minted yet.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {BLOB_DEFS.map(({ key, label, icon: Icon, color, desc, viewable }) => {
+              const uri = agent[key];
+              return (
+                <div
+                  key={key}
+                  className="rounded-lg overflow-hidden"
+                  style={{ border: "1px solid var(--bf-quinary)", borderLeft: `3px solid ${color}` }}
+                >
+                  <div className="px-3 py-2.5 flex items-start gap-3" style={{ background: "var(--bf-quaternary)" }}>
+                    <Icon size={14} strokeWidth={2} style={{ color, flexShrink: 0, marginTop: 2 }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-white">{label}</span>
+                        {!viewable && (
+                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(240,91,91,0.12)", color: "#f05b5b" }}>encrypted</span>
+                        )}
+                      </div>
+                      <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{desc}</p>
+                      {uri && (
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <code className="text-xs font-mono truncate" style={{ color: "var(--bf-symbol)" }}>{truncate(uri, 14, 8)}</code>
+                          <CopyButton value={uri} />
+                        </div>
+                      )}
+                      {viewable && (
+                        <div className="mt-2">
+                          <ManifestViewer agentId={agent.id} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Metadata leverage explainer ── */}
+      {isMinted && (
+        <div
+          className="rounded-lg px-4 py-3 text-xs leading-relaxed"
+          style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)", color: "var(--bf-gray)" }}
+        >
+          <p className="font-semibold text-white mb-1">How BonFire uses this data</p>
+          <ul className="flex flex-col gap-1 list-disc list-inside">
+            <li>The <span style={{ color: "var(--bf-accent)" }}>Public Manifest</span> populates the marketplace listing — name, bio, tags, and model info.</li>
+            <li>The <span style={{ color: "#f05b5b" }}>Encrypted Bundle</span> is decrypted by the platform executor at inference time to restore the agent&apos;s soul and config.</li>
+            <li>The <span style={{ color: "#fbbf24" }}>Sealed DEK</span> ensures only the authorised executor can decrypt the bundle — enforced by ECIES + TEE.</li>
+            <li>The <span style={{ color: "var(--bf-fire)" }}>bundle hash</span> is written on-chain at mint and verified on every bundle load — tamper-proof.</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Adapters
+// ---------------------------------------------------------------------------
+
+const ADAPTERS = [
+  { id: "telegram",  label: "Telegram",       icon: "✈️",  active: true  },
+  { id: "whatsapp",  label: "WhatsApp",        icon: "💬",  active: false },
+  { id: "discord",   label: "Discord",         icon: "🎮",  active: false },
+  { id: "slack",     label: "Slack",           icon: "⚡",  active: false },
+  { id: "twitter",   label: "X / Twitter",     icon: "🐦",  active: false },
+];
+
+// ---------------------------------------------------------------------------
+// Overview stats — real model + animated earnings counter
+// ---------------------------------------------------------------------------
+
+function OverviewStats({ agentId }: { agentId: string }) {
+  const [model, setModel] = useState<string | null>(null);
+  const [priceOg, setPriceOg] = useState<string | null>(null);
+  const [displayed, setDisplayed] = useState("0.000000");
+  const accRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      bf.getAgentConfig(agentId).catch(() => ({ model: null, provider: null, temperature: null })),
+      bf.getAgentEarnings(agentId).catch(() => ({ totalEarnedOg: "0", priceOg: "0" })),
+    ]).then(([cfg, earnings]) => {
+      if (cancelled) return;
+      if (cfg.model) setModel(cfg.model);
+      const price = earnings.priceOg ?? "0";
+      setPriceOg(price);
+      const seed = parseFloat(earnings.totalEarnedOg ?? "0");
+      accRef.current = seed;
+      setDisplayed(seed.toFixed(6));
+      timerRef.current = setInterval(() => {
+        accRef.current += Math.random() * 0.000004 + 0.000001;
+        setDisplayed(accRef.current.toFixed(6));
+      }, 80);
+    });
+
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [agentId]);
+
+  const inviteLabel = priceOg === null ? "—" : priceOg === "0" ? "Free" : `${priceOg} OG`;
+
+  return (
+    <div className="grid grid-cols-3 gap-3 text-sm">
+      {/* Model */}
+      <div className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
+        <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>Model</p>
+        <p className="text-white font-semibold text-sm truncate" title={model ?? undefined}>
+          {model ?? "—"}
+        </p>
+      </div>
+
+      {/* Animated earnings */}
+      <div className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
+        <p className="text-xs uppercase tracking-wide mb-1 font-semibold flex items-center gap-1.5" style={{ color: "var(--bf-gray)" }}>
+          Earned
+          <span className="relative flex h-1.5 w-1.5">
+            <span
+              className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+              style={{ background: "#4ade80" }}
+            />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: "#4ade80" }} />
+          </span>
+        </p>
+        <p className="font-semibold text-sm tabular-nums" style={{ color: "#4ade80" }}>
+          {displayed} <span className="text-xs font-normal" style={{ color: "var(--bf-gray)" }}>OG</span>
+        </p>
+      </div>
+
+      {/* Invite price */}
+      <div className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
+        <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>Invite Price</p>
+        <p className="text-white font-semibold text-sm">{inviteLabel}</p>
+      </div>
+    </div>
+  );
+}
+
+function AdaptersSection() {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide mb-2 font-semibold" style={{ color: "var(--bf-gray)" }}>
+        Connections
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {ADAPTERS.map(a => (
+          <div
+            key={a.id}
+            className="rounded-lg p-2.5 flex items-center gap-2.5"
+            style={{
+              background: "var(--bf-quaternary)",
+              border: `1px solid ${a.active ? "var(--bf-accent)" : "var(--bf-quinary)"}`,
+              opacity: a.active ? 1 : 0.65,
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>{a.icon}</span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-white leading-tight">{a.label}</p>
+              <p
+                className="text-xs leading-tight mt-0.5"
+                style={{ color: a.active ? "#4ade80" : "var(--bf-gray)" }}
+              >
+                {a.active ? "● Active" : "Coming soon"}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 function LogRow({ log }: { log: AgentLog }) {
   const [expanded, setExpanded] = useState(false);

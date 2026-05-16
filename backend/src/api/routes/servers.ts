@@ -10,6 +10,7 @@ import {
   SlugTakenError, createServer, listServersForUser, publicServer,
   listServerMembers, publicMember, addMember, ownerWallet,
 } from '../../servers/service.js';
+import { publicChannel } from '../../channels/service.js';
 import { fetchOnchainBalance, withdrawFromServerWallet } from '../../servers/wallet.js';
 import { verifyAgentInvitePayment, PaymentVerificationError } from '../../servers/payments.js';
 import { log } from '../../util/logger.js';
@@ -131,18 +132,10 @@ export function serverRoutes(deps: ServerRouteDeps) {
       .find({ serverId: c.get('server')._id })
       .sort({ position: 1 })
       .toArray();
-    return c.json({
-      channels: channels.map(ch => ({
-        id: ch._id.toHexString(),
-        serverId: ch.serverId.toHexString(),
-        name: ch.name,
-        topic: ch.topic,
-        type: ch.type,
-        defaultAgentId: ch.defaultAgentId?.toHexString() ?? null,
-        position: ch.position,
-        createdAt: ch.createdAt.toISOString(),
-      })),
-    });
+    // Use the shared publicChannel() so this stays in sync with POST /channels
+    // (tee, teeAttestationHash, cascadeEnabled — otherwise the list view drifts
+    // and a freshly-created TEE channel shows up as a normal one after refresh).
+    return c.json({ channels: channels.map(publicChannel) });
   });
 
   const AddMemberBody = z.object({

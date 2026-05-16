@@ -33,6 +33,15 @@
   --bf-brand-hero-gradient: linear-gradient(160deg, #0a0014 0%, #2a0060 45%, #8116e0 100%);
 }
 
+::selection {
+  background: var(--bf-plum);
+  color: var(--bf-blanche);
+}
+::-moz-selection {
+  background: var(--bf-plum);
+  color: var(--bf-blanche);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
 body {

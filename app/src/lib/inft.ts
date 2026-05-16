@@ -14,11 +14,10 @@
 import { useSendTransaction } from '@privy-io/react-auth';
 import { encodeFunctionData, parseEther } from 'viem';
 import { BonFireAgentINFTAbi } from './abi/BonFireAgentINFT';
+import { OG_CHAIN_ID } from './chain-config';
 
-/** The 0G testnet chain ID. Passed as a hint to Privy's sendTransaction so the
- *  embedded wallet signs on the correct network without requiring a manual
- *  chain-switch step from the user. */
-export const OG_TESTNET_CHAIN_ID = 16602;
+/** @deprecated Re-exported from chain-config for backwards compatibility. */
+export const OG_TESTNET_CHAIN_ID = OG_CHAIN_ID;
 
 export interface MintPayload {
   manifestUri: string;
@@ -76,7 +75,7 @@ export function useMintAgent() {
       const result = await sendTransaction({
         to: contractAddress,
         data,
-        chainId: OG_TESTNET_CHAIN_ID,
+        chainId: OG_CHAIN_ID,
       });
       return { txHash: result.hash };
     } catch (err) {
@@ -138,14 +137,14 @@ export function useSendOgPayment() {
       to: toAddress,
       valueHex,
       amountOg,
-      chainId: OG_TESTNET_CHAIN_ID,
+      chainId: OG_CHAIN_ID,
     });
 
     try {
       const result = await sendTransaction({
         to: toAddress as `0x${string}`,
         value: valueHex,
-        chainId: OG_TESTNET_CHAIN_ID,
+        chainId: OG_CHAIN_ID,
       });
       // eslint-disable-next-line no-console
       console.info('[og-payment] confirmed', result.hash);

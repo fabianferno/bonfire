@@ -106,8 +106,8 @@ async function loadSdk(): Promise<{ Indexer: any; MemData: any }> {
  * Real 0G Storage client.
  *
  * Required env:
- *   OG_RPC_URL                     — 0G chain JSON-RPC (default: https://evmrpc-testnet.0g.ai)
- *   OG_INDEXER_URL                 — 0G storage indexer (default: https://indexer-storage-testnet-turbo.0g.ai)
+ *   OG_RPC_URL                     — 0G chain JSON-RPC (default: https://evmrpc.0g.ai)
+ *   OG_INDEXER_URL                 — 0G storage indexer (default: https://indexer-storage-turbo.0g.ai)
  *   STORAGE_UPLOADER_PRIVATE_KEY   — hex private key of the wallet that pays for storage submissions.
  *                                    Falls back to PLATFORM_EXECUTOR_PRIVATE_KEY if unset.
  *
@@ -115,8 +115,8 @@ async function loadSdk(): Promise<{ Indexer: any; MemData: any }> {
  * keccak-merkle root returned by the storage layer for the uploaded blob.
  */
 function createRealStorage(): OgStorageClient {
-  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
-  const indexerUrl = process.env.OG_INDEXER_URL ?? 'https://indexer-storage-testnet-turbo.0g.ai';
+  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
+  const indexerUrl = process.env.OG_INDEXER_URL ?? 'https://indexer-storage-turbo.0g.ai';
   const privateKey = process.env.STORAGE_UPLOADER_PRIVATE_KEY ?? process.env.PLATFORM_EXECUTOR_PRIVATE_KEY ?? '';
 
   return {

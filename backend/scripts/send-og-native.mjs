@@ -29,7 +29,7 @@ function normalizePk(pk) {
   return null;
 }
 
-const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
 const pkRaw =
   process.env.FUND_SENDER_PRIVATE_KEY ??
   process.env.SEED_OWNER_PRIVATE_KEY ??

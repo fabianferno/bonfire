@@ -11,7 +11,7 @@
 
 import { useSendTransaction } from '@privy-io/react-auth';
 import { parseEther } from 'viem';
-import { OG_TESTNET_CHAIN_ID } from './inft';
+import { OG_CHAIN_ID } from './chain-config';
 
 export interface FundResult {
   txHash: `0x${string}`;
@@ -33,7 +33,7 @@ export function useFundServerWallet() {
     const result = await sendTransaction({
       to: opts.toAddress,
       value: valueWei,
-      chainId: OG_TESTNET_CHAIN_ID,
+      chainId: OG_CHAIN_ID,
     });
     return { txHash: result.hash };
   }

@@ -53,7 +53,7 @@ export class PaymentVerificationError extends Error {
 export async function verifyAgentInvitePayment(
   input: VerifyPaymentInput,
 ): Promise<VerifyPaymentResult> {
-  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
   const provider = new JsonRpcProvider(rpcUrl);
   const minConfirmations = input.minConfirmations ?? DEFAULT_MIN_CONFIRMATIONS;
 

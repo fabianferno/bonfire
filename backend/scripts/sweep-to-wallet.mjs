@@ -19,7 +19,7 @@ if (!TO || !/^0x[a-fA-F0-9]{40}$/.test(TO)) {
   process.exit(1);
 }
 
-const RPC = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+const RPC = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
 const MONGO = process.env.MONGODB_URI ?? 'mongodb://localhost:27017';
 const DB = process.env.MONGODB_DB ?? 'bonfire';
 const provider = new ethers.JsonRpcProvider(RPC);

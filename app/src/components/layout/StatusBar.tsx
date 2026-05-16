@@ -2,11 +2,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy, Check, Droplets, ExternalLink, X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { OG_RPC_URL, OG_EXPLORER_URL, OG_IS_TESTNET } from "@/lib/chain-config";
 
-const RPC_URL = "https://evmrpc-testnet.0g.ai";
+const RPC_URL = OG_RPC_URL;
 const POLL_MS = 30_000;
-const FAUCET_URL = "https://faucet.0g.ai";
-const EXPLORER_URL = "https://chainscan-galileo.0g.ai";
+// Faucet only exists on the Galileo testnet; on mainnet the link is hidden by the consumer.
+const FAUCET_URL = OG_IS_TESTNET ? "https://faucet.0g.ai" : "";
+const EXPLORER_URL = OG_EXPLORER_URL;
 
 function formatOg(weiHex: string): string {
   const wei = BigInt(weiHex);

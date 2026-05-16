@@ -6,7 +6,7 @@ const req = createRequire(import.meta.url);
 const { createZGComputeNetworkBroker } = req('@0glabs/0g-serving-broker');
 
 const pk = process.env.DEPLOYER_PRIVATE_KEY;
-const rpc = process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai';
+const rpc = process.env.OG_RPC_URL || 'https://evmrpc.0g.ai';
 if (!pk) { console.error('DEPLOYER_PRIVATE_KEY missing'); process.exit(1); }
 
 const amount = Number(process.argv[2] ?? 2);  // OG, default 2

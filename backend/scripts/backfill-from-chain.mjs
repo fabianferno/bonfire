@@ -12,7 +12,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { ethers } from 'ethers';
 import { createOgStorage } from '../src/storage-0g/index.js';
 
-const RPC = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+const RPC = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
 const CONTRACT = process.env.INFT_CONTRACT_ADDRESS;
 const MONGO = process.env.MONGODB_URI;
 const DB = process.env.MONGODB_DB ?? 'bonfire';

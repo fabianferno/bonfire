@@ -6,6 +6,7 @@ import type { Agent } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import FlameAvatar from "@/components/shared/FlameAvatar";
 import { BF_DISPLAY_AGENT_MODEL } from "@/lib/brand";
+import { OG_EXPLORER_URL, OG_IS_TESTNET } from "@/lib/chain-config";
 import SkillManager from "./SkillManager";
 import { bf, type McpServerConfig } from "@/lib/api-bonfire";
 import { ModalLabel, ModalInput } from "@/components/shared/Modal";
@@ -425,8 +426,10 @@ function McpManager({ agentId }: { agentId: string }) {
 // iNFT Visualiser
 // ---------------------------------------------------------------------------
 
-const OG_EXPLORER = "https://chainscan-galileo.0g.ai";
-const OG_STORAGE_EXPLORER = "http://storagescan-galileo.0g.ai";
+const OG_EXPLORER = OG_EXPLORER_URL;
+const OG_STORAGE_EXPLORER = OG_IS_TESTNET
+  ? "https://storagescan-galileo.0g.ai"
+  : "https://storagescan.0g.ai";
 
 function ogHashFromUri(uri: string): string {
   return uri.startsWith("og://") ? uri.slice(5) : uri;

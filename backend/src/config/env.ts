@@ -12,7 +12,12 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   MAX_CASCADE_HOPS: z.coerce.number().int().nonnegative().default(5),
   MAX_INVOCATIONS_PER_ROOT: z.coerce.number().int().positive().default(20),
-  OG_RPC_URL: z.string().url().default('https://evmrpc-testnet.0g.ai'),
+  // 0G Aristotle mainnet defaults — chainId 16661. Override per environment.
+  OG_RPC_URL: z.string().url().default('https://evmrpc.0g.ai'),
+  OG_CHAIN_ID: z.coerce.number().int().positive().default(16661),
+  OG_INDEXER_URL: z.string().url().default('https://indexer-storage-turbo.0g.ai'),
+  OG_EXPLORER_URL: z.string().url().default('https://chainscan.0g.ai'),
+  OG_NETWORK_NAME: z.string().default('0G Aristotle Mainnet'),
   // INFT integration — all optional. When all three are present, the backend
   // wires up the chain client, 0G Storage, and chain-event indexer at boot.
   INFT_CONTRACT_ADDRESS: z.string().regex(/^0x[0-9a-fA-F]{40}$/).optional(),

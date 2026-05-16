@@ -2,20 +2,9 @@
 
 import React from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
-import { defineChain } from 'viem';
+import { ogChain } from '@/lib/chain-config';
 
 const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? '';
-
-// 0G testnet — register so Privy embedded wallets can sign INFT transactions
-// without prompting the user to add the chain manually.
-const ogTestnet = defineChain({
-  id: 16602,
-  name: '0G Galileo Testnet',
-  nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
-  rpcUrls: { default: { http: ['https://evmrpc-testnet.0g.ai'] } },
-  blockExplorers: { default: { name: '0G Explorer', url: 'https://chainscan-galileo.0g.ai' } },
-  testnet: true,
-});
 
 /**
  * Wraps the app in Privy's React provider.
@@ -52,8 +41,8 @@ export default function PrivyClientProvider({
         loginMethods: ['email', 'google', 'wallet'],
         embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
         appearance: { theme: 'dark', accentColor: '#5865F2' },
-        defaultChain: ogTestnet,
-        supportedChains: [ogTestnet],
+        defaultChain: ogChain,
+        supportedChains: [ogChain],
       }}
     >
       {children}

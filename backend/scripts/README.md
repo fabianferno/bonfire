@@ -20,7 +20,7 @@ records into MongoDB.
 | `PLATFORM_EXECUTOR_PRIVATE_KEY` | Platform executor keypair. Its public key is used to ECIES-seal each DEK. |
 | `INFT_CONTRACT_ADDRESS` | Deployed `BonFireAgentINFT` contract address (0x…). |
 | `MONGO_URL` | MongoDB connection string for the BonFire backend database. |
-| `OG_RPC_URL` | (Optional) 0G Chain JSON-RPC endpoint. Defaults to `https://evmrpc-testnet.0g.ai`. |
+| `OG_RPC_URL` | (Optional) 0G Chain JSON-RPC endpoint. Defaults to `https://evmrpc.0g.ai`. |
 | `OG_STORAGE_MOCK` | (Optional) Set to `1` to use the filesystem mock instead of real 0G Storage. |
 | `EMBER_AGENT_BASE_URL` | (Optional) `baseUrl` written into each `AgentDoc`. Defaults to `http://localhost:7777`. |
 

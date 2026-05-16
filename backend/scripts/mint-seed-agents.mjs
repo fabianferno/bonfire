@@ -19,7 +19,7 @@
  *   MONGO_URL                      backend MongoDB connection string
  *
  * Optional env vars:
- *   OG_RPC_URL        defaults to https://evmrpc-testnet.0g.ai
+ *   OG_RPC_URL        defaults to https://evmrpc.0g.ai
  *   OG_STORAGE_MOCK   set to 1 to use the filesystem mock (dry-run / CI)
  *   EMBER_AGENT_BASE_URL  baseUrl written into AgentDoc (default http://localhost:7777)
  *
@@ -74,7 +74,7 @@ async function main() {
   const platformPriv = requireEnv('PLATFORM_EXECUTOR_PRIVATE_KEY');
   const contractAddress = requireEnv('INFT_CONTRACT_ADDRESS');
   const mongoUrl = requireEnv('MONGO_URL');
-  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
   const agentBaseUrl = process.env.EMBER_AGENT_BASE_URL ?? 'http://localhost:7777';
 
   // ── Source file ──────────────────────────────────────────────────────────

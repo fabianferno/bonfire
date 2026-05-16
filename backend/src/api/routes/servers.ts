@@ -44,16 +44,25 @@ export function serverRoutes(deps: ServerRouteDeps) {
         iconUrl: parsed.data.iconUrl ?? null,
         ownerId: c.get('user')._id,
       });
+      // Funding hints come from env so a single OG_RPC_URL / OG_CHAIN_ID swap
+      // toggles the workspace between mainnet (Aristotle, 16661) and testnet
+      // (Galileo, 16602) without touching code.
+      const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
+      const chainId = parseInt(process.env.OG_CHAIN_ID ?? '16661', 10) || 16661;
+      const isTestnet = chainId === 16602;
       return c.json({
         server: publicServer(server),
         wallet: ownerWallet(server.wallet!),
         funding: {
-          faucetUrl: 'https://faucet.0g.ai',
-          rpcUrl: 'https://evmrpc-testnet.0g.ai',
-          chainId: 16602,
+          // Faucet only exists on Galileo testnet; on mainnet leave it null.
+          faucetUrl: isTestnet ? 'https://faucet.0g.ai' : null,
+          rpcUrl,
+          chainId,
           minRecommendedBalance: '4',
           tokenSymbol: 'OG',
-          note: 'Fund this address with at least 4 OG. The 0G ledger requires a 3 OG minimum + gas reserve.',
+          note: isTestnet
+            ? 'Fund this address with at least 4 OG from the Galileo faucet. The 0G ledger requires a 3 OG minimum + gas reserve.'
+            : 'Fund this address with at least 4 OG (mainnet). The 0G ledger requires a 3 OG minimum + gas reserve.',
         },
       }, 201);
     } catch (e) {
@@ -178,19 +187,22 @@ export function serverRoutes(deps: ServerRouteDeps) {
     let balance: string | null = null;
     let balanceError: string | null = null;
     try {
-      const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai';
+      const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc.0g.ai';
       balance = await fetchOnchainBalance(rpcUrl, server.wallet.address);
     } catch (e: any) {
       balanceError = e?.message ?? String(e);
     }
 
+    const chainIdHere = parseInt(process.env.OG_CHAIN_ID ?? '16661', 10) || 16661;
+    const isTestnetHere = chainIdHere === 16602;
     return c.json({
       wallet: ownerWallet(server.wallet),
       balance,
       balanceError,
       funding: {
-        faucetUrl: 'https://faucet.0g.ai',
-        rpcUrl: process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai',
+        faucetUrl: isTestnetHere ? 'https://faucet.0g.ai' : null,
+        rpcUrl: process.env.OG_RPC_URL || 'https://evmrpc.0g.ai',
+        chainId: chainIdHere,
         tokenSymbol: 'OG',
       },
     });
@@ -207,7 +219,7 @@ export function serverRoutes(deps: ServerRouteDeps) {
     const parsed = WithdrawBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
 
-    const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc-testnet.0g.ai';
+    const rpcUrl = process.env.OG_RPC_URL || 'https://evmrpc.0g.ai';
     try {
       const result = await withdrawFromServerWallet({
         rpcUrl,

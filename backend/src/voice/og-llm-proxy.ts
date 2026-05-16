@@ -61,7 +61,7 @@ async function loadBroker(): Promise<{ createZGComputeNetworkBroker: (wallet: et
  * change). One-time cold-start cost per server, then self-sufficient.
  */
 async function initBrokerForWallet(privateKey: string): Promise<OgLlmProxyState | null> {
-  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+  const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc.0g.ai';
   const provider = new ethers.JsonRpcProvider(rpcUrl);
 
   let wallet: ethers.Wallet;

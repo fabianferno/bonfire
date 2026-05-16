@@ -19,9 +19,18 @@ const config: HardhatUserConfig = {
   },
   networks: {
     hardhat: {},
+    // 0G Galileo testnet — kept for fallback / smoke-tests.
     ogTestnet: {
-      url: process.env.OG_RPC_URL ?? "https://evmrpc-testnet.0g.ai",
+      url: process.env.OG_TESTNET_RPC_URL ?? "https://evmrpc-testnet.0g.ai",
       chainId: 16602,
+      accounts: process.env.DEPLOYER_PRIVATE_KEY
+        ? [process.env.DEPLOYER_PRIVATE_KEY]
+        : [],
+    },
+    // 0G Aristotle mainnet — chainId 16661.
+    ogMainnet: {
+      url: process.env.OG_RPC_URL ?? "https://evmrpc.0g.ai",
+      chainId: 16661,
       accounts: process.env.DEPLOYER_PRIVATE_KEY
         ? [process.env.DEPLOYER_PRIVATE_KEY]
         : [],

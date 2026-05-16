@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2, Sparkles, ExternalLink, Copy, Check, Lock, FileText, Key, Flame, Box } from "lucide-react";
-import type { Agent, AgentLog } from "@/context/AppContext";
+import { ShieldCheck, Wrench, Plus, Trash2, Server, Loader2, Sparkles, ExternalLink, Copy, Check, Lock, FileText, Key, Flame, Box } from "lucide-react";
+import { SiTelegram, SiWhatsapp, SiDiscord, SiSlack, SiX } from "react-icons/si";
+import type { Agent } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import FlameAvatar from "@/components/shared/FlameAvatar";
 import { BF_DISPLAY_AGENT_MODEL } from "@/lib/brand";
@@ -23,7 +24,7 @@ interface Props {
 }
 
 export default function AgentProfileModal({ agent, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"overview" | "inft" | "skills" | "mcp" | "logs">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "inft" | "skills" | "mcp">("overview");
 
   return (
     <Modal title="" onClose={onClose} wide maxHeight="70vh">
@@ -60,7 +61,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
 
       {/* Tabs */}
       <div className="flex gap-1" style={{ borderBottom: "1px solid var(--bf-quinary)" }}>
-        {(["overview", "inft", "skills", "mcp", "logs"] as const).map(tab => (
+        {(["overview", "inft", "skills", "mcp"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -70,7 +71,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
               borderBottom: activeTab === tab ? "2px solid var(--bf-accent)" : "2px solid transparent",
             }}
           >
-            {tab === "logs" ? "Audit Logs" : tab === "skills" ? "Skills" : tab === "mcp" ? "MCP Servers" : tab === "inft" ? "iNFT" : "Overview"}
+            {tab === "skills" ? "Skills" : tab === "mcp" ? "MCP Servers" : tab === "inft" ? "iNFT" : "Overview"}
           </button>
         ))}
       </div>
@@ -128,15 +129,6 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
         </div>
       )}
 
-      {activeTab === "logs" && (
-        <div className="flex flex-col gap-2 pt-2">
-          {(!agent.logs || agent.logs.length === 0) ? (
-            <p className="text-center py-8 text-sm" style={{ color: "var(--bf-gray)" }}>No logs recorded yet.</p>
-          ) : (
-            agent.logs.map(log => <LogRow key={log.id} log={log} />)
-          )}
-        </div>
-      )}
     </Modal>
   );
 }
@@ -741,11 +733,11 @@ function InftVisualiser({ agent }: { agent: Agent }) {
 // ---------------------------------------------------------------------------
 
 const ADAPTERS = [
-  { id: "telegram",  label: "Telegram",       icon: "✈️",  active: true  },
-  { id: "whatsapp",  label: "WhatsApp",        icon: "💬",  active: false },
-  { id: "discord",   label: "Discord",         icon: "🎮",  active: false },
-  { id: "slack",     label: "Slack",           icon: "⚡",  active: false },
-  { id: "twitter",   label: "X / Twitter",     icon: "🐦",  active: false },
+  { id: "telegram", label: "Telegram",    Icon: SiTelegram, color: "#2AABEE", active: true  },
+  { id: "whatsapp", label: "WhatsApp",    Icon: SiWhatsapp, color: "#25D366", active: false },
+  { id: "discord",  label: "Discord",     Icon: SiDiscord,  color: "#5865F2", active: false },
+  { id: "slack",    label: "Slack",       Icon: SiSlack,    color: "#4A154B", active: false },
+  { id: "x",        label: "X / Twitter", Icon: SiX,        color: "#ffffff", active: false },
 ];
 
 // ---------------------------------------------------------------------------
@@ -835,7 +827,7 @@ function AdaptersSection() {
               opacity: a.active ? 1 : 0.65,
             }}
           >
-            <span style={{ fontSize: 18, lineHeight: 1 }}>{a.icon}</span>
+            <a.Icon size={18} color={a.active ? a.color : "var(--bf-gray)"} />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-white leading-tight">{a.label}</p>
               <p
@@ -853,69 +845,3 @@ function AdaptersSection() {
 }
 
 
-function LogRow({ log }: { log: AgentLog }) {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetail = log.toolInput || log.toolOutput;
-
-  const Icon = log.level === "tool" ? Wrench
-    : log.level === "warn" ? AlertTriangle
-    : log.level === "error" ? AlertTriangle
-    : log.level === "info" ? Info
-    : Terminal;
-
-  const iconColor = log.level === "tool" ? "var(--bf-accent)"
-    : log.level === "warn" ? "var(--bf-yellow)"
-    : log.level === "error" ? "var(--bf-accent)"
-    : "var(--bf-gray)";
-
-  const time = new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-
-  return (
-    <div className="rounded-lg overflow-hidden" style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}>
-      <button
-        onClick={() => hasDetail && setExpanded(v => !v)}
-        className="flex items-start gap-3 w-full px-3 py-2.5 text-left"
-        style={{ cursor: hasDetail ? "pointer" : "default" }}
-      >
-        <Icon size={14} style={{ color: iconColor, flexShrink: 0, marginTop: 2 }} strokeWidth={2} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-white leading-snug">{log.message}</p>
-          {log.toolName && (
-            <p className="text-xs mt-0.5 font-mono" style={{ color: "var(--bf-accent)" }}>
-              {log.toolName}{log.durationMs !== undefined ? ` · ${log.durationMs}ms` : ""}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs font-mono" style={{ color: "var(--bf-symbol)" }}>{time}</span>
-          {hasDetail && (
-            expanded
-              ? <ChevronDown size={13} style={{ color: "var(--bf-gray)" }} />
-              : <ChevronRight size={13} style={{ color: "var(--bf-gray)" }} />
-          )}
-        </div>
-      </button>
-
-      {expanded && hasDetail && (
-        <div className="px-3 pb-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--bf-quinary)" }}>
-          {log.toolInput && (
-            <div>
-              <p className="text-xs uppercase tracking-wide mb-1 pt-2 font-semibold" style={{ color: "var(--bf-gray)" }}>Input</p>
-              <pre className="text-xs rounded p-2 overflow-x-auto" style={{ background: "var(--bf-tertiary)", color: "var(--bf-accent)" }}>
-                {JSON.stringify(JSON.parse(log.toolInput), null, 2)}
-              </pre>
-            </div>
-          )}
-          {log.toolOutput && (
-            <div>
-              <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>Output</p>
-              <pre className="text-xs rounded p-2 overflow-x-auto" style={{ background: "var(--bf-tertiary)", color: "var(--bf-fire)" }}>
-                {JSON.stringify(JSON.parse(log.toolOutput), null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}

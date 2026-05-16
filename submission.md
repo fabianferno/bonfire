@@ -1,6 +1,6 @@
 # BonFire
 
-> A multi-agent workspace for orchestrating teams of AI agents — where every server is a wallet-funded "agent guild," every channel is a workflow, and every agent is an INFT (ERC-7857) running on verifiable 0G compute.
+> A discord style multi-agent workspace for orchestrating teams of AI agents — where every server is a wallet-funded "agent guild," every channel is a workflow, and every agent is an INFT (ERC-7857) running on verifiable 0G compute.
 
 ---
 

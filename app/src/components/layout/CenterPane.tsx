@@ -1,11 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-<<<<<<< HEAD
-import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock, XCircle } from "lucide-react";
-=======
-import { Hash, Volume2, Bell, BellOff, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock } from "lucide-react";
->>>>>>> 03b949e (feat(notifications): implement agent notifications with in-app toasts)
+import { Hash, Volume2, Bell, BellOff, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock, XCircle } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
@@ -21,6 +17,14 @@ export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage, closeChannel, user } = useApp();
   const voice = useVoiceCtx();
 
+  const [showMembers, setShowMembers] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [notifEnabled, setNotifEnabled] = useState(() => {
+    try { return localStorage.getItem("bonfire_notifications_enabled") !== "false"; } catch { return true; }
+  });
+
   const handleCloseTee = async () => {
     if (!activeChannel || !activeServer) return;
     const ok = window.confirm(
@@ -32,6 +36,20 @@ export default function CenterPane() {
     } catch {
       // closeChannel surfaces the error via setError; nothing more to do here.
     }
+  };
+
+  const toggleNotif = () => {
+    const next = !notifEnabled;
+    setNotifEnabled(next);
+    try { localStorage.setItem("bonfire_notifications_enabled", next ? "true" : "false"); } catch { /* ignore */ }
+    if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  };
+
+  const openSearch = () => {
+    setShowSearch(s => !s);
+    setTimeout(() => searchRef.current?.focus(), 50);
   };
 
   if (!activeServer) {
@@ -48,37 +66,13 @@ export default function CenterPane() {
   const isAudit = activeChannel.type === "audit";
   const isKnowledge = activeChannel.type === "knowledge";
 
-  // Audit channels get their own self-contained pane.
   if (isAudit) {
     return <AuditLogPane channelId={activeChannel.id} />;
   }
 
-  // Knowledge base: list/manage shared docs that feed every agent.
   if (isKnowledge) {
     return <KnowledgePanel serverId={activeServerId} />;
   }
-
-  const [showMembers, setShowMembers] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
-  const [notifEnabled, setNotifEnabled] = useState(() => {
-    try { return localStorage.getItem("bonfire_notifications_enabled") !== "false"; } catch { return true; }
-  });
-
-  const toggleNotif = () => {
-    const next = !notifEnabled;
-    setNotifEnabled(next);
-    try { localStorage.setItem("bonfire_notifications_enabled", next ? "true" : "false"); } catch { /* ignore */ }
-    if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-  };
-
-  const openSearch = () => {
-    setShowSearch(s => !s);
-    setTimeout(() => searchRef.current?.focus(), 50);
-  };
 
   const messages = activeChannel.messages;
   const filteredMessages = searchQuery.trim()
@@ -129,7 +123,6 @@ export default function CenterPane() {
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
-<<<<<<< HEAD
           {activeChannel.tee && activeServer.ownerId === user.id && (
             <button
               onClick={handleCloseTee}
@@ -153,25 +146,7 @@ export default function CenterPane() {
               Close session
             </button>
           )}
-          {[
-            { Icon: Bell,       title: "Notification Preferences" },
-            { Icon: Pin,        title: "Pinned Messages" },
-            { Icon: Users,      title: "Member List" },
-            { Icon: Search,     title: "Search" },
-            { Icon: HelpCircle, title: "Help" },
-          ].map(({ Icon, title }) => (
-            <button
-              key={title}
-              title={title}
-              className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors"
-              style={{ color: "var(--bf-gray)" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "white"; (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--bf-gray)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              <Icon size={20} strokeWidth={1.5} />
-            </button>
-          ))}
-=======
+
           {/* Notifications toggle */}
           <HeaderBtn
             title={notifEnabled ? "Mute notifications" : "Enable notifications"}
@@ -191,11 +166,10 @@ export default function CenterPane() {
             <Search size={20} strokeWidth={1.5} />
           </HeaderBtn>
 
-          {/* Help — links to docs */}
+          {/* Help */}
           <HeaderBtn title="Help" onClick={() => window.open("https://github.com/anthropics/claude-code/issues", "_blank")}>
             <HelpCircle size={20} strokeWidth={1.5} />
           </HeaderBtn>
->>>>>>> 03b949e (feat(notifications): implement agent notifications with in-app toasts)
         </div>
       </header>
 

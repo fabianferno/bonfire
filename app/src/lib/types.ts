@@ -38,6 +38,7 @@ export interface BackendMessage {
   serverId: string;
   authorType: 'user' | 'agent';
   authorId: string;
+  authorName: string | null;
   content: string;
   mentions: Array<{ type: 'user' | 'agent'; id: string }>;
   replyToId: string | null;

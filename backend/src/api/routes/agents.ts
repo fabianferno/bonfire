@@ -106,13 +106,22 @@ export function agentRoutes(deps: AgentRouteDeps) {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
     try {
-      const res = await fetch(`${a.baseUrl}/config`);
-      const cfg = await res.json() as Record<string, unknown>;
-      const llm = cfg?.llm as Record<string, unknown> | undefined;
+      const [cfgRes, tenantRes] = await Promise.allSettled([
+        fetch(`${a.baseUrl}/config`).then(r => r.json() as Promise<Record<string, unknown>>),
+        fetch(`${a.baseUrl}/tenants/${a.slug}`).then(r => r.json() as Promise<Record<string, unknown>>),
+      ]);
+      const cfg = cfgRes.status === 'fulfilled' ? cfgRes.value : {};
+      const tenantData = tenantRes.status === 'fulfilled' ? tenantRes.value : {};
+      const tenant = (tenantData as Record<string, unknown>)?.tenant as Record<string, unknown> | undefined;
+      const globalLlm = cfg?.llm as Record<string, unknown> | undefined;
+      const tenantLlm = tenant?.llm as Record<string, unknown> | undefined;
+      const provider = ((tenantLlm?.provider ?? globalLlm?.provider) as string | undefined) ?? null;
+      const rawModel = ((tenantLlm?.model ?? globalLlm?.model) as string | undefined) ?? null;
+      const model = rawModel ?? (provider === 'zerog' ? '0G Compute (auto)' : null);
       return c.json({
-        model: (llm?.model as string) ?? null,
-        provider: (llm?.provider as string) ?? null,
-        temperature: (llm?.temperature as number) ?? null,
+        model,
+        provider,
+        temperature: ((tenantLlm?.temperature ?? globalLlm?.temperature) as number | undefined) ?? null,
       });
     } catch {
       return c.json({ model: null, provider: null, temperature: null });

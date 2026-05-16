@@ -58,6 +58,20 @@ describe('Privy auth routes', () => {
     expect(r1.body.user.id).toBe(r2.body.user.id);
   });
 
+  it('POST /v1/auth/privy/verify does not overwrite displayName after PATCH /v1/auth/me', async () => {
+    const v1 = await jsonReq(app, 'POST', '/v1/auth/privy/verify', { token: MOCK_TOKEN });
+    expect(v1.status).toBe(200);
+
+    const patch = await jsonReq(app, 'PATCH', '/v1/auth/me',
+      { displayName: 'Custom Namu' }, MOCK_TOKEN);
+    expect(patch.status).toBe(200);
+    expect(patch.body.user.displayName).toBe('Custom Namu');
+
+    const v2 = await jsonReq(app, 'POST', '/v1/auth/privy/verify', { token: MOCK_TOKEN });
+    expect(v2.status).toBe(200);
+    expect(v2.body.user.displayName).toBe('Custom Namu');
+  });
+
   // -------------------------------------------------------------------------
   // POST /v1/auth/privy/verify — invalid token
   // -------------------------------------------------------------------------

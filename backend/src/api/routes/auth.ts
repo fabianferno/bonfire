@@ -55,9 +55,19 @@ export function authRoutes(deps: AuthRouteDeps) {
     const { privyDid, walletAddress, email } = claims;
     const now = new Date();
 
+    const walletShort = walletAddress
+      ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
+      : null;
+    const derivedDisplayName = email
+      ? email.split('@')[0]
+      : (walletShort ?? privyDid.slice(0, 20));
+
     const result = await deps.db.collection<UserDoc>(collections.users).findOneAndUpdate(
       { privyDid },
       {
+        // Wallet + email stay in sync with Privy. Do NOT $set displayName here —
+        // that would overwrite a name the user chose via PATCH /v1/auth/me on
+        // every page load / verify (same pattern as requireUser middleware).
         $set: {
           walletAddress: walletAddress ?? null,
           email: email ?? null,
@@ -68,7 +78,7 @@ export function authRoutes(deps: AuthRouteDeps) {
           privyDid,
           passwordHash: null,
           username: privyDid.replace(/[^a-z0-9_-]/gi, '').slice(0, 32).toLowerCase() || 'user',
-          displayName: email ?? privyDid.slice(0, 20),
+          displayName: derivedDisplayName,
           avatarUrl: null,
           bio: null,
           isService: false,
@@ -81,6 +91,17 @@ export function authRoutes(deps: AuthRouteDeps) {
     if (!result) {
       log.error({ privyDid }, '/v1/auth/privy/verify upsert returned null');
       return c.json({ error: 'internal_error' }, 500);
+    }
+
+    // Upgrade legacy accounts whose displayName is still a raw Privy DID.
+    // Only overwrites when the stored value starts with "did:" — never touches
+    // a name the user chose themselves.
+    if (result.displayName?.startsWith('did:')) {
+      await deps.db.collection<UserDoc>(collections.users).updateOne(
+        { _id: result._id, displayName: { $regex: /^did:/ } },
+        { $set: { displayName: derivedDisplayName } },
+      );
+      result.displayName = derivedDisplayName;
     }
 
     return c.json({ user: privateUser(result as UserDoc) });

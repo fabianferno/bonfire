@@ -232,14 +232,14 @@ function mapChannel(c: BackendChannel): Channel {
   };
 }
 
-function mapAgent(a: BackendAgent): Agent {
+function mapAgent(a: BackendAgent, modelFromConfig?: string | null): Agent {
   return {
     id: a.id,
     name: a.name,
     slug: a.slug,
     avatar: agentAvatarDisplayUrl(a),
     description: a.description,
-    model: undefined,
+    model: modelFromConfig ?? undefined,
     status: "online",
     isBot: true,
     skills: [],
@@ -283,9 +283,9 @@ function mapMessage(
     avatar = agent?.avatar;
   } else {
     if (m.authorId === selfId) {
-      author = userMap.get(selfId)?.username ?? "You";
+      author = userMap.get(selfId)?.username ?? m.authorName ?? "You";
     } else {
-      author = userMap.get(m.authorId)?.username ?? m.authorId;
+      author = m.authorName ?? userMap.get(m.authorId)?.username ?? m.authorId;
     }
   }
 
@@ -526,17 +526,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const agentMembers = rawMembers.filter((m) => m.principalType === "agent");
         const userMembers = rawMembers.filter((m) => m.principalType === "user");
 
-        // Fetch agent details for all agent members in parallel
+        // Fetch agent details + runtime LLM config (model label) per member
         const agentDetails = await Promise.allSettled(
           agentMembers.map((m) => bf.getAgent(m.principalId)),
         );
+        const agentConfigs = await Promise.allSettled(
+          agentMembers.map((m) => bf.getAgentConfig(m.principalId)),
+        );
 
         const agents: Agent[] = agentDetails
-          .filter(
-            (r): r is PromiseFulfilledResult<{ agent: BackendAgent }> =>
-              r.status === "fulfilled",
-          )
-          .map((r) => mapAgent(r.value.agent));
+          .map((r, i) => {
+            if (r.status !== "fulfilled") return null;
+            const cfg = agentConfigs[i];
+            const model =
+              cfg.status === "fulfilled" ? cfg.value.model : null;
+            return mapAgent(r.value.agent, model);
+          })
+          .filter((a): a is Agent => a !== null);
 
         // Populate agent map cache
         for (const a of agents) agentMapRef.current.set(a.id, a);
@@ -743,12 +749,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const agentDetails = await Promise.allSettled(
           rawMembers.map((m) => bf.getAgent(m.principalId)),
         );
+        const agentConfigs = await Promise.allSettled(
+          rawMembers.map((m) => bf.getAgentConfig(m.principalId)),
+        );
         const agents: Agent[] = agentDetails
-          .filter(
-            (r): r is PromiseFulfilledResult<{ agent: BackendAgent }> =>
-              r.status === "fulfilled",
-          )
-          .map((r) => mapAgent(r.value.agent));
+          .map((r, i) => {
+            if (r.status !== "fulfilled") return null;
+            const cfg = agentConfigs[i];
+            const model =
+              cfg.status === "fulfilled" ? cfg.value.model : null;
+            return mapAgent(r.value.agent, model);
+          })
+          .filter((a): a is Agent => a !== null);
         for (const a of agents) agentMapRef.current.set(a.id, a);
         setServers((prev) =>
           prev.map((s) => (s.id !== serverId ? s : { ...s, agents })),

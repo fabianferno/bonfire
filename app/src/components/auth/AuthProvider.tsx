@@ -143,8 +143,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, baseUser?.privyDid]);
+    // Re-run when the Privy session gains an email so /privy/verify can $set it in Mongo.
+  }, [isAuthenticated, baseUser?.privyDid, baseUser?.email]);
 
   const resolvedUser: AuthUser | null = baseUser
     ? {

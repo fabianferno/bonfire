@@ -11,7 +11,7 @@ import {
 } from '../../messages/service.js';
 import { computeInvocationSet, startStreamingInvocation, runCascade } from '../../agents/invoker.js';
 import { collections } from '../../db/types.js';
-import type { ServerDoc } from '../../db/types.js';
+import type { ServerDoc, UserDoc } from '../../db/types.js';
 import { takeStream } from '../../messages/stream-registry.js';
 import { sseChunks } from '../../agents/client.js';
 import { log } from '../../util/logger.js';
@@ -129,7 +129,27 @@ export function messageRoutes(deps: MessageRouteDeps) {
     const beforeStr = c.req.query('before');
     const before = beforeStr && ObjectId.isValid(beforeStr) ? new ObjectId(beforeStr) : null;
     const { messages, nextCursor } = await listChannelMessages(deps.db, c.get('channel')._id, { limit, before });
-    return c.json({ messages: messages.map(publicMessage), nextCursor });
+
+    const userIds = [...new Set(
+      messages.filter(m => m.authorType === 'user').map(m => m.authorId),
+    )];
+    const nameMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const users = await deps.db.collection<UserDoc>(collections.users)
+        .find({ _id: { $in: userIds } }, { projection: { displayName: 1, username: 1 } })
+        .toArray();
+      for (const u of users) {
+        nameMap.set(u._id.toHexString(), u.displayName || u.username);
+      }
+    }
+
+    return c.json({
+      messages: messages.map(m => ({
+        ...publicMessage(m),
+        authorName: m.authorType === 'user' ? (nameMap.get(m.authorId.toHexString()) ?? null) : null,
+      })),
+      nextCursor,
+    });
   });
 
   app.delete('/v1/messages/:mid', requireAuth, async (c) => {

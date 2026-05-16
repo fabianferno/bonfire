@@ -428,10 +428,8 @@ function McpManager({ agentId }: { agentId: string }) {
 const OG_EXPLORER = "https://chainscan-galileo.0g.ai";
 const OG_STORAGE_EXPLORER = "http://storagescan-galileo.0g.ai";
 
-function ogUriToExplorerUrl(uri: string): string {
-  // og://0xABC… → http://storagescan-galileo.0g.ai/file/0xABC…
-  const hash = uri.startsWith("og://") ? uri.slice(5) : uri;
-  return `${OG_STORAGE_EXPLORER}/file/${hash}`;
+function ogHashFromUri(uri: string): string {
+  return uri.startsWith("og://") ? uri.slice(5) : uri;
 }
 
 function truncate(s: string, start = 6, end = 4) {
@@ -698,22 +696,16 @@ function InftVisualiser({ agent }: { agent: Agent }) {
                       <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{desc}</p>
                       {uri && (
                         <div className="flex items-center gap-1 mt-1.5">
-                          <a
-                            href={ogUriToExplorerUrl(uri)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="View on 0G Storage Explorer"
-                            className="text-xs font-mono truncate hover:underline"
-                            style={{ color: "var(--bf-symbol)" }}
-                          >
+                          <code className="text-xs font-mono truncate" style={{ color: "var(--bf-symbol)" }}>
                             {truncate(uri, 14, 8)}
-                          </a>
-                          <CopyButton value={uri} />
+                          </code>
+                          <CopyButton value={ogHashFromUri(uri)} />
                           <a
-                            href={ogUriToExplorerUrl(uri)}
+                            href={OG_STORAGE_EXPLORER}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title="Open in 0G Storage Explorer"
+                            title="Open 0G Storage Explorer — paste the copied hash into the search box"
+                            onClick={() => navigator.clipboard?.writeText(ogHashFromUri(uri))}
                             className="flex-shrink-0 hover:opacity-80"
                             style={{ color: "var(--bf-accent)" }}
                           >

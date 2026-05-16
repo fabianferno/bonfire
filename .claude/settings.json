@@ -9,7 +9,11 @@
       "Bash(NODE_OPTIONS=--openssl-legacy-provider react-app-rewired start)",
       "Bash(curl -s http://localhost:3000/)",
       "Bash(npx react-app-rewired *)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(ln -sf /Users/silas/bonfire/app/node_modules/@swc/helpers /Users/silas/bonfire/app/node_modules/next/node_modules/@swc/helpers)",
+      "WebFetch(domain:chainscan-galileo.0g.ai)",
+      "WebFetch(domain:storagescan-galileo.0g.ai)",
+      "Bash(curl -s \"http://storagescan-galileo.0g.ai/\")"
     ]
   }
 }

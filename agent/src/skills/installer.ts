@@ -36,7 +36,17 @@ export async function installSkill(
   const client = clients[source];
   if (!client) return { ok: false, reason: `unknown source: ${source}` };
 
-  const installed = await client.install(req, targetDir);
+  // Registry clients (npx subprocess for agentskill.sh, git clone for url, etc.)
+  // throw on non-zero exit. Wrap so the HTTP route surfaces a structured 400
+  // instead of crashing into a 500.
+  let installed;
+  try {
+    installed = await client.install(req, targetDir);
+  } catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).slice(0, 400);
+    log.warn({ source, slug: req.slug, msg }, 'skill install: registry client failed');
+    return { ok: false, reason: `registry_install_failed: ${msg}` };
+  }
   const skillMdPath = path.join(installed.dir, 'SKILL.md');
   let content = '';
   try { content = await fs.readFile(skillMdPath, 'utf8'); }

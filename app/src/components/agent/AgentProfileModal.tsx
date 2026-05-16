@@ -125,7 +125,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
 
       {activeTab === "mcp" && (
         <div className="pt-2">
-          <McpManager agentId={agent.id} />
+          <McpManager agentId={agent.id} canManage />
         </div>
       )}
 
@@ -139,7 +139,7 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
 
 const EMPTY_FORM = { id: "", command: "", args: "", env: "" };
 
-function McpManager({ agentId }: { agentId: string }) {
+export function McpManager({ agentId, canManage = true }: { agentId: string; canManage?: boolean }) {
   const [servers, setServers] = useState<Record<string, McpServerConfig>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -274,22 +274,24 @@ function McpManager({ agentId }: { agentId: string }) {
             >
               {cfg.enabled ? "enabled" : "disabled"}
             </span>
-            <button
-              onClick={() => handleRemove(id)}
-              disabled={removing === id}
-              className="rounded p-1 transition-colors disabled:opacity-40 hover:bg-[color-mix(in_srgb,var(--bf-accent)_18%,transparent)]"
-              title="Remove server"
-            >
-              {removing === id
-                ? <Loader2 size={13} className="animate-spin" style={{ color: "var(--bf-gray)" }} />
-                : <Trash2 size={13} style={{ color: "var(--bf-symbol)" }} />
-              }
-            </button>
+            {canManage && (
+              <button
+                onClick={() => handleRemove(id)}
+                disabled={removing === id}
+                className="rounded p-1 transition-colors disabled:opacity-40 hover:bg-[color-mix(in_srgb,var(--bf-accent)_18%,transparent)]"
+                title="Remove server"
+              >
+                {removing === id
+                  ? <Loader2 size={13} className="animate-spin" style={{ color: "var(--bf-gray)" }} />
+                  : <Trash2 size={13} style={{ color: "var(--bf-symbol)" }} />
+                }
+              </button>
+            )}
           </div>
         </div>
       ))}
 
-      {showForm && (
+      {showForm && canManage && (
         <div
           className="rounded-lg p-3 flex flex-col gap-3"
           style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}
@@ -368,7 +370,7 @@ function McpManager({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {!showForm && (
+      {!showForm && canManage && (
         <div className="flex flex-col gap-3">
           <div>
             <p className="text-xs uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5" style={{ color: "var(--bf-gray)" }}>

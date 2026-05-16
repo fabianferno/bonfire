@@ -17,6 +17,8 @@ function truncateAddr(addr: string) {
 }
 import InviteAgentToServerModal from '@/components/marketplace/InviteAgentToServerModal';
 import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
+import SkillManager from '@/components/agent/SkillManager';
+import { McpManager } from '@/components/agent/AgentProfileModal';
 import LeftNav from '@/components/layout/LeftNav';
 import StatusBar from '@/components/layout/StatusBar';
 import DmSidebar, { upsertDmSession } from '@/components/dm/DmSidebar';
@@ -81,7 +83,6 @@ function EditAgentModal({ agent, onClose, onSaved }: {
   const [name, setName] = useState(agent.name);
   const [description, setDescription] = useState(agent.description);
   const [priceOg, setPriceOg] = useState(agent.priceOg ?? '0');
-  const [avatarUrl, setAvatarUrl] = useState(agent.avatarUrl ?? '');
   const [tags, setTags] = useState((agent.tags ?? []).join(', '));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -94,7 +95,6 @@ function EditAgentModal({ agent, onClose, onSaved }: {
         name: name.trim(),
         description: description.trim(),
         priceOg: priceOg.trim() || '0',
-        avatarUrl: avatarUrl.trim() || null,
         tags: tags.split(',').map(t => t.trim()).filter(Boolean),
       });
       onSaved(res.agent);
@@ -148,9 +148,6 @@ function EditAgentModal({ agent, onClose, onSaved }: {
           ))}
           {field('Invite Price (OG)', (
             <input className={inputCls} style={inputStyle} value={priceOg} onChange={e => setPriceOg(e.target.value)} placeholder="0" type="number" min="0" step="0.01" />
-          ))}
-          {field('Avatar URL', (
-            <input className={inputCls} style={inputStyle} value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} placeholder="https://…" />
           ))}
           {field('Tags (comma-separated)', (
             <input className={inputCls} style={inputStyle} value={tags} onChange={e => setTags(e.target.value)} placeholder="Research, Code, Finance" />
@@ -209,6 +206,7 @@ function AgentDetailOverlay({
 }) {
   const [agent, setAgent] = useState(initialAgent);
   const [showEdit, setShowEdit] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'mcp'>('overview');
   const { user } = useAuth();
   const walletAddress = user?.walletAddress ?? null;
   const isCreator = !!walletAddress && !!agent.ownerWallet &&
@@ -319,10 +317,27 @@ function AgentDetailOverlay({
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-1 px-6 flex-shrink-0" style={{ borderBottom: '1px solid var(--bf-quaternary)' }}>
+          {(['overview', 'skills', 'mcp'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="px-4 py-2 text-sm font-semibold capitalize transition-colors"
+              style={{
+                color: activeTab === tab ? 'var(--bf-white)' : 'var(--bf-gray)',
+                borderBottom: activeTab === tab ? '2px solid var(--bf-accent)' : '2px solid transparent',
+              }}
+            >
+              {tab === 'mcp' ? 'MCP Servers' : tab === 'skills' ? 'Skills' : 'Overview'}
+            </button>
+          ))}
+        </div>
+
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
           {/* Left */}
-          <div className="flex-1 overflow-y-auto px-6 pt-2 pb-6">
+          <div className="flex-1 overflow-y-auto px-6 pt-4 pb-6">
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-white text-2xl font-bold">{agent.name}</h2>
               <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: 'var(--bf-accent)', color: 'white' }}>BOT</span>
@@ -331,24 +346,36 @@ function AgentDetailOverlay({
             <p className="text-sm mb-1" style={{ color: 'var(--bf-gray)' }}>@{agent.slug}</p>
             <p className="text-sm mb-4" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
 
-            {/* Screenshot placeholder */}
-            <div className="mb-6 rounded-xl flex items-center justify-center" style={{ background: 'var(--bf-quaternary)', aspectRatio: '16/9' }}>
-              <div className="text-center">
-                <ImagePlus size={32} style={{ color: 'var(--bf-gray)', margin: '0 auto 8px' }} />
-                <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>No screenshots uploaded</p>
-              </div>
-            </div>
+            {activeTab === 'overview' && (
+              <>
+                {/* Screenshot placeholder */}
+                <div className="mb-6 rounded-xl flex items-center justify-center" style={{ background: 'var(--bf-quaternary)', aspectRatio: '16/9' }}>
+                  <div className="text-center">
+                    <ImagePlus size={32} style={{ color: 'var(--bf-gray)', margin: '0 auto 8px' }} />
+                    <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>No screenshots uploaded</p>
+                  </div>
+                </div>
 
-            {/* Tags */}
-            {agent.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {agent.tags.map(t => (
-                  <span key={t} className="text-xs px-2.5 py-1 rounded-full font-medium"
-                    style={{ background: (CATEGORY_COLOR[t] ?? '#888') + '33', color: CATEGORY_COLOR[t] ?? '#888' }}>
-                    {t}
-                  </span>
-                ))}
-              </div>
+                {/* Tags */}
+                {agent.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {agent.tags.map(t => (
+                      <span key={t} className="text-xs px-2.5 py-1 rounded-full font-medium"
+                        style={{ background: (CATEGORY_COLOR[t] ?? '#888') + '33', color: CATEGORY_COLOR[t] ?? '#888' }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'skills' && (
+              <SkillManager agentId={agent.id} canManage={isCreator} />
+            )}
+
+            {activeTab === 'mcp' && (
+              <McpManager agentId={agent.id} canManage={isCreator} />
             )}
           </div>
 
@@ -437,6 +464,80 @@ function DetailRow({ label, value, color, mono }: { label: string; value: string
     <div className="flex items-start justify-between gap-2">
       <span className="text-xs flex-shrink-0" style={{ color: 'var(--bf-gray)' }}>{label}</span>
       <span className={`text-xs font-medium text-right${mono ? ' font-mono' : ''}`} style={{ color: color ?? 'white' }}>{value}</span>
+    </div>
+  );
+}
+
+// ── Agent card ────────────────────────────────────────────────────────────────
+
+function renderAgentCard(
+  agent: BackendAgent,
+  handlers: {
+    setDetailAgent: (a: BackendAgent) => void;
+    startDm: (a: BackendAgent) => void;
+    openInvite: (a: BackendAgent) => void;
+  },
+) {
+  const { setDetailAgent, startDm, openInvite } = handlers;
+  return (
+    <div key={agent.id}
+      className="rounded-xl overflow-hidden cursor-pointer"
+      style={{ background: 'var(--bf-secondary)' }}
+      onClick={() => setDetailAgent(agent)}
+    >
+      {/* Mini banner */}
+      <div className="relative z-10 h-16">
+        <MarketplaceAgentCardBanner agent={agent} />
+        <FlameAvatar
+          slug={agent.slug}
+          avatarUrl={agent.avatarUrl}
+          size={52}
+          className="absolute bottom-0 left-3 z-10 translate-y-1/2 border-2"
+          style={{ borderRadius: '0.5rem', borderColor: 'var(--bf-secondary)' }}
+        />
+      </div>
+      <div className="pt-9 px-4 pb-4 flex flex-col gap-2">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-white font-bold text-sm">{agent.name}</span>
+            </div>
+            {agent.tags[0] && (
+              <span className="text-xs px-2 py-0.5 rounded font-medium"
+                style={{ background: (CATEGORY_COLOR[agent.tags[0]] ?? '#888') + '33', color: CATEGORY_COLOR[agent.tags[0]] ?? '#888' }}>
+                {agent.tags[0]}
+              </span>
+            )}
+          </div>
+          <PriceLabel agent={agent} />
+        </div>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
+        {agent.ownerWallet && (
+          <p className="text-xs font-mono" style={{ color: 'var(--bf-symbol)' }}>
+            by {truncateAddr(agent.ownerWallet)}
+          </p>
+        )}
+        <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
+          <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={e => { e.stopPropagation(); startDm(agent); }}
+              className="text-xs px-2.5 py-1.5 rounded font-semibold flex items-center gap-1"
+              style={{ background: 'var(--bf-white)', color: 'var(--bf-primary)' }}
+            >
+              <MessageSquare size={11} />
+              Message
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); openInvite(agent); }}
+              className="text-xs px-2.5 py-1.5 rounded font-semibold text-white"
+              style={{ background: 'var(--bf-accent)' }}
+            >
+              Invite
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -545,7 +646,8 @@ function MarketplaceInner() {
   const [inviteTarget, setInviteTarget] = useState<BackendAgent | null>(null);
   const [detailAgent, setDetailAgent] = useState<BackendAgent | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const { status } = useAuth();
+  const { status, user } = useAuth();
+  const walletAddress = user?.walletAddress ?? null;
   const router = useRouter();
   const cancelRef = useRef(false);
 
@@ -563,6 +665,13 @@ function MarketplaceInner() {
     a.name.toLowerCase().includes(query.toLowerCase()) ||
     a.description.toLowerCase().includes(query.toLowerCase())
   );
+
+  const myAgents = walletAddress
+    ? filtered.filter(a => a.ownerWallet?.toLowerCase() === walletAddress.toLowerCase())
+    : [];
+  const otherAgents = walletAddress
+    ? filtered.filter(a => a.ownerWallet?.toLowerCase() !== walletAddress.toLowerCase())
+    : filtered;
 
   const openInvite = (a: BackendAgent) => {
     if (status !== 'authenticated') { router.push('/login'); return; }
@@ -631,94 +740,52 @@ function MarketplaceInner() {
                   </div>
                 ) : (
                   <>
+                    {/* Search bar */}
+                    <div className="flex justify-end mb-4">
+                      <div
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[220px] sm:max-w-sm"
+                        style={{ background: 'var(--bf-secondary)', border: '1px solid var(--bf-quaternary)' }}
+                      >
+                        <Search size={16} style={{ color: 'var(--bf-gray)', flexShrink: 0 }} />
+                        <input
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                          placeholder="Search agents"
+                          className="bg-transparent text-sm focus:outline-none flex-1 min-w-0 text-white placeholder:opacity-50"
+                          style={{ color: 'white' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* My agents */}
+                    {myAgents.length > 0 && (
+                      <section className="mb-8">
+                        <h2 className="text-white font-bold text-lg mb-4">My Agents</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {myAgents.map(agent => renderAgentCard(agent, { setDetailAgent, startDm, openInvite }))}
+                        </div>
+                      </section>
+                    )}
+
                     {/* All agents */}
                     <section>
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-                        <h2 className="text-white font-bold text-lg shrink-0">All Agents</h2>
-                        <div
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg w-full sm:w-auto sm:min-w-[220px] sm:max-w-sm"
-                          style={{ background: 'var(--bf-secondary)', border: '1px solid var(--bf-quaternary)' }}
-                        >
-                          <Search size={16} style={{ color: 'var(--bf-gray)', flexShrink: 0 }} />
-                          <input
-                            value={query}
-                            onChange={e => setQuery(e.target.value)}
-                            placeholder="Search agents"
-                            className="bg-transparent text-sm focus:outline-none flex-1 min-w-0 text-white placeholder:opacity-50"
-                            style={{ color: 'white' }}
-                          />
-                        </div>
-                      </div>
-                      {filtered.length === 0 ? (
+                      <h2 className="text-white font-bold text-lg mb-4">
+                        {myAgents.length > 0 ? 'Other Agents' : 'All Agents'}
+                      </h2>
+                      {otherAgents.length === 0 && myAgents.length === 0 ? (
                         <EmptyState
                           hasAgents={agents.length > 0}
                           query={query}
                           onClearSearch={() => { setQuery(''); }}
                           onCreateAgent={status === 'authenticated' ? () => setShowCreate(true) : undefined}
                         />
+                      ) : otherAgents.length === 0 ? (
+                        <p className="text-sm py-6" style={{ color: 'var(--bf-gray)' }}>
+                          {query ? 'No other agents match your search.' : 'No other agents yet.'}
+                        </p>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {filtered.map(agent => (
-                            <div key={agent.id}
-                              className="rounded-xl overflow-hidden cursor-pointer"
-                              style={{ background: 'var(--bf-secondary)' }}
-                              onClick={() => setDetailAgent(agent)}
-                            >
-                              {/* Mini banner */}
-                              <div className="relative z-10 h-16">
-                                <MarketplaceAgentCardBanner agent={agent} />
-                                <FlameAvatar
-                                  slug={agent.slug}
-                                  avatarUrl={agent.avatarUrl}
-                                  size={52}
-                                  className="absolute bottom-0 left-3 z-10 translate-y-1/2 border-2"
-                                  style={{ borderRadius: '0.5rem', borderColor: 'var(--bf-secondary)' }}
-                                />
-                              </div>
-                              <div className="pt-9 px-4 pb-4 flex flex-col gap-2">
-                                <div className="flex items-start justify-between">
-                                  <div>
-                                    <div className="flex items-center gap-1.5 mb-1">
-                                      <span className="text-white font-bold text-sm">{agent.name}</span>
-                                    </div>
-                                    {agent.tags[0] && (
-                                      <span className="text-xs px-2 py-0.5 rounded font-medium"
-                                        style={{ background: (CATEGORY_COLOR[agent.tags[0]] ?? '#888') + '33', color: CATEGORY_COLOR[agent.tags[0]] ?? '#888' }}>
-                                        {agent.tags[0]}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <PriceLabel agent={agent} />
-                                </div>
-                                <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
-                                {agent.ownerWallet && (
-                                  <p className="text-xs font-mono" style={{ color: 'var(--bf-symbol)' }}>
-                                    by {truncateAddr(agent.ownerWallet)}
-                                  </p>
-                                )}
-                                <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
-                                  <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={e => { e.stopPropagation(); startDm(agent); }}
-                                      className="text-xs px-2.5 py-1.5 rounded font-semibold flex items-center gap-1"
-                                      style={{ background: 'var(--bf-white)', color: 'var(--bf-primary)' }}
-                                    >
-                                      <MessageSquare size={11} />
-                                      Message
-                                    </button>
-                                    <button
-                                      onClick={e => { e.stopPropagation(); openInvite(agent); }}
-                                      className="text-xs px-2.5 py-1.5 rounded font-semibold text-white"
-                                      style={{ background: 'var(--bf-accent)' }}
-                                    >
-                                      Invite
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                          {otherAgents.map(agent => renderAgentCard(agent, { setDetailAgent, startDm, openInvite }))}
                         </div>
                       )}
                     </section>

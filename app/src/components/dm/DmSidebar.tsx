@@ -111,25 +111,42 @@ export default function DmSidebar() {
       </div>
 
       {/* DM list */}
-      <div className="flex-1 overflow-y-auto px-2 pt-2 flex flex-col gap-0.5">
+      <div className="flex-1 overflow-y-auto px-2 pt-2 flex flex-col gap-0.5 min-h-0">
         {sessions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 px-4 gap-3 text-center">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center"
-              style={{ background: "var(--bf-quinary)" }}
-            >
-              <MessageSquare size={20} style={{ color: "var(--bf-gray)" }} />
-            </div>
-            <p className="text-xs leading-relaxed" style={{ color: "var(--bf-gray)" }}>
-              No DMs yet. Browse the{" "}
-              <button
-                onClick={() => router.push("/marketplace")}
-                className="underline hover:text-white transition-colors"
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex flex-col items-center py-10 px-4 gap-3 text-center flex-shrink-0">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{ background: "var(--bf-quinary)" }}
               >
-                marketplace
-              </button>{" "}
-              and message an agent.
-            </p>
+                <MessageSquare size={20} style={{ color: "var(--bf-gray)" }} />
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--bf-gray)" }}>
+                No DMs yet. Browse the{" "}
+                <button
+                  onClick={() => router.push("/marketplace")}
+                  className="underline hover:text-white transition-colors"
+                >
+                  marketplace
+                </button>{" "}
+                and message an agent.
+              </p>
+            </div>
+            <div className="mt-auto flex justify-center pb-3 pt-2 flex-shrink-0">
+              <iframe
+                src="/flame.html"
+                title="flame"
+                aria-hidden="true"
+                style={{
+                  width: 192,
+                  height: 224,
+                  border: 0,
+                  background: "transparent",
+                  display: "block",
+                  maxWidth: "100%",
+                }}
+              />
+            </div>
           </div>
         ) : (
           sessions.map((s) => {

@@ -110,11 +110,11 @@ export default function DmSidebar() {
         </button>
       </div>
 
-      {/* DM list */}
-      <div className="flex-1 overflow-y-auto px-2 pt-2 flex flex-col gap-0.5 min-h-0">
-        {sessions.length === 0 ? (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex flex-col items-center py-10 px-4 gap-3 text-center flex-shrink-0">
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* DM list */}
+        <div className="flex-1 overflow-y-auto px-2 pt-2 flex flex-col gap-0.5 min-h-0">
+          {sessions.length === 0 ? (
+            <div className="flex flex-col items-center py-10 px-4 gap-3 text-center">
               <div
                 className="w-12 h-12 rounded-full flex items-center justify-center"
                 style={{ background: "var(--bf-quinary)" }}
@@ -132,71 +132,75 @@ export default function DmSidebar() {
                 and message an agent.
               </p>
             </div>
-            <div className="mt-auto flex justify-center pb-3 pt-2 flex-shrink-0">
-              <iframe
-                src="/flame.html"
-                title="flame"
-                aria-hidden="true"
-                style={{
-                  width: 192,
-                  height: 224,
-                  border: 0,
-                  background: "transparent",
-                  display: "block",
-                  maxWidth: "100%",
-                }}
-              />
-            </div>
-          </div>
-        ) : (
-          sessions.map((s) => {
-            const isActive = pathname === `/dm/${s.agentId}`;
-            return (
-              <button
-                key={s.agentId}
-                onClick={() => router.push(`/dm/${s.agentId}`)}
-                className="group flex items-center gap-2.5 w-full px-2 py-2 rounded-md transition-colors text-left relative"
-                style={{
-                  background: isActive ? "var(--bf-quinary)" : "transparent",
-                  color: isActive ? "white" : "var(--bf-gray)",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent";
-                }}
-              >
-                <AgentAvatar session={s} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span
-                      className="text-sm font-semibold truncate"
-                      style={{ color: isActive ? "white" : "var(--bf-text, white)" }}
-                    >
-                      {s.agentName}
-                    </span>
-                    <span className="text-xs flex-shrink-0 ml-1" style={{ color: "var(--bf-symbol)" }}>
-                      {timeAgo(s.lastMessageAt)}
-                    </span>
-                  </div>
-                  <p className="text-xs truncate" style={{ color: "var(--bf-gray)" }}>
-                    {s.lastMessage || "Start a conversation"}
-                  </p>
-                </div>
-                {/* Remove button */}
+          ) : (
+            sessions.map((s) => {
+              const isActive = pathname === `/dm/${s.agentId}`;
+              return (
                 <button
-                  onClick={(e) => remove(e, s.agentId)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--bf-quaternary)]"
-                  style={{ color: "var(--bf-gray)" }}
-                  title="Remove DM"
+                  key={s.agentId}
+                  onClick={() => router.push(`/dm/${s.agentId}`)}
+                  className="group flex items-center gap-2.5 w-full px-2 py-2 rounded-md transition-colors text-left relative"
+                  style={{
+                    background: isActive ? "var(--bf-quinary)" : "transparent",
+                    color: isActive ? "white" : "var(--bf-gray)",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent";
+                  }}
                 >
-                  <X size={11} />
+                  <AgentAvatar session={s} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="text-sm font-semibold truncate"
+                        style={{ color: isActive ? "white" : "var(--bf-text, white)" }}
+                      >
+                        {s.agentName}
+                      </span>
+                      <span className="text-xs flex-shrink-0 ml-1" style={{ color: "var(--bf-symbol)" }}>
+                        {timeAgo(s.lastMessageAt)}
+                      </span>
+                    </div>
+                    <p className="text-xs truncate" style={{ color: "var(--bf-gray)" }}>
+                      {s.lastMessage || "Start a conversation"}
+                    </p>
+                  </div>
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => remove(e, s.agentId)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--bf-quaternary)]"
+                    style={{ color: "var(--bf-gray)" }}
+                    title="Remove DM"
+                  >
+                    <X size={11} />
+                  </button>
                 </button>
-              </button>
-            );
-          })
-        )}
+              );
+            })
+          )}
+        </div>
+
+        <div
+          className="flex-shrink-0 flex justify-center pb-3 pt-1"
+          style={{ borderTop: "1px solid var(--bf-quaternary)" }}
+        >
+          <iframe
+            src="/flame.html"
+            title="flame"
+            aria-hidden="true"
+            style={{
+              width: 192,
+              height: 224,
+              border: 0,
+              background: "transparent",
+              display: "block",
+              maxWidth: "100%",
+            }}
+          />
+        </div>
       </div>
     </aside>
   );

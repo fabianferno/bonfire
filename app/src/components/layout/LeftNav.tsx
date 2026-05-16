@@ -145,13 +145,19 @@ export default function LeftNav() {
         <NavPill
           title="Add a Server"
           onClick={() => setShowModal(true)}
-          accentColor="var(--bf-nav-pill-gradient)"
+          accentColor="var(--bf-plum)"
+          iconColor="var(--bf-white)"
         >
           <SolidPlusIcon size={24} />
         </NavPill>
 
         {/* Discover */}
-        <NavPill title="Discover Servers" accentColor="var(--bf-nav-pill-gradient)" onClick={() => router.push("/marketplace")}>
+        <NavPill
+          title="Discover Servers"
+          accentColor="var(--bf-plum)"
+          iconColor="var(--bf-white)"
+          onClick={() => router.push("/marketplace")}
+        >
           <SolidCompassIcon size={22} />
         </NavPill>
       </nav>

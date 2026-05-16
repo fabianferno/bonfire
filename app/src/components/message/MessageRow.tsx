@@ -3,6 +3,8 @@ import { useState } from "react";
 import { ShieldCheck, ShieldAlert, ChevronRight, ChevronDown, Wrench } from "lucide-react";
 import type { Message } from "@/context/AppContext";
 import Avatar from "@/components/shared/Avatar";
+import { useApp } from "@/context/AppContext";
+import AgentProfileModal from "@/components/agent/AgentProfileModal";
 
 interface ToolCall {
   name: string;
@@ -116,6 +118,9 @@ function hasToolCalls(content: string): boolean {
 
 export default function MessageRow({ msg }: { msg: Message }) {
   const [showVerify, setShowVerify] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const { activeServer } = useApp();
+  const agentObj = msg.isBot ? activeServer?.agents.find(a => a.id === msg.authorId) : undefined;
 
   // Split content into visible text and tool-call section
   const lines = msg.content.split("\n");
@@ -126,6 +131,7 @@ export default function MessageRow({ msg }: { msg: Message }) {
   const toolContent = firstToolIdx >= 0 ? lines.slice(firstToolIdx).join("\n") : (hasToolCalls(msg.content) ? msg.content : "");
 
   return (
+    <>
     <div
       className="flex gap-3 px-4 py-1.5 group rounded-lg transition-colors"
       onMouseEnter={e => (e.currentTarget.style.background = "var(--bf-quinary)")}
@@ -140,7 +146,16 @@ export default function MessageRow({ msg }: { msg: Message }) {
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="font-bold text-white">{msg.author}</span>
+          {msg.isBot && agentObj ? (
+            <button
+              onClick={() => setShowProfile(true)}
+              className="font-bold text-white hover:underline transition-colors text-left"
+            >
+              {msg.author}
+            </button>
+          ) : (
+            <span className="font-bold text-white">{msg.author}</span>
+          )}
           {msg.isBot && (
             <span
               className="text-white font-bold uppercase"
@@ -184,5 +199,9 @@ export default function MessageRow({ msg }: { msg: Message }) {
         )}
       </div>
     </div>
+    {showProfile && agentObj && (
+      <AgentProfileModal agent={agentObj} onClose={() => setShowProfile(false)} />
+    )}
+    </>
   );
 }

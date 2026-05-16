@@ -95,6 +95,14 @@ export const bf = {
   getAgent: (aidOrSlug: string) =>
     api<{ agent: BackendAgent }>('GET', `/v1/agents/${aidOrSlug}`),
 
+  getAgentManifest: (aidOrSlug: string) =>
+    api<{ manifest: Record<string, unknown> }>('GET', `/v1/agents/${aidOrSlug}/manifest`, undefined, { auth: false }),
+
+  getAgentConfig: (aidOrSlug: string) =>
+    api<{ model: string | null; provider: string | null; temperature: number | null }>(
+      'GET', `/v1/agents/${aidOrSlug}/config`, undefined, { auth: false }
+    ),
+
   /**
    * Lifetime invite earnings for an agent — sum of every paid serverMember row.
    * Public (no auth).

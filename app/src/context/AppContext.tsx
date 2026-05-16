@@ -22,7 +22,7 @@ import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 
 // ─── Public types (kept stable so existing components compile) ─────────────
 
-export type ChannelType = "text" | "voice" | "audit";
+export type ChannelType = "text" | "voice" | "audit" | "knowledge";
 export type AgentStatus = "online" | "busy" | "idle" | "offline";
 export type AcquisitionMode = "owned" | "rented" | "licensed";
 
@@ -208,7 +208,14 @@ function mapServer(s: BackendServer): Omit<Server, "channels" | "agents" | "memb
 }
 
 function mapChannel(c: BackendChannel): Channel {
-  const type: ChannelType = c.type === "voice" ? "voice" : c.type === "audit" ? "audit" : "text";
+  const type: ChannelType =
+    c.type === "voice"
+      ? "voice"
+      : c.type === "audit"
+        ? "audit"
+        : c.type === "knowledge"
+          ? "knowledge"
+          : "text";
   return {
     id: c.id,
     name: c.name,
@@ -244,9 +251,11 @@ function mapAgent(a: BackendAgent): Agent {
 }
 
 function mapMember(m: BackendMember): Member {
+  // Prefer alias → backend-joined username → displayName → principalId (last resort).
+  // principalId is a Mongo hex and reads like a Privy DID — never desirable.
   return {
     id: m.principalId,
-    username: m.alias ?? m.principalId,
+    username: m.alias ?? m.username ?? m.displayName ?? m.principalId,
     discriminator: "#0000",
     online: true,
   };

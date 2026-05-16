@@ -1,7 +1,7 @@
 import type { Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { collections } from '../db/types.js';
-import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc, ServerDoc } from '../db/types.js';
+import type { ChannelDoc, MessageDoc, AgentDoc, ServerMemberDoc, ServerDoc, KnowledgeDocDoc } from '../db/types.js';
 import { findAgentByIdOrSlug } from './registry.js';
 import { findUserById } from '../users/service.js';
 import { invokeAgent, openAgentStream, type TenantPayload } from './client.js';
@@ -62,6 +62,43 @@ export function chatIdForChannel(channelId: ObjectId): string {
   return `bonfire:channel:${channelId.toHexString()}`;
 }
 
+// ---------------------------------------------------------------------------
+// Knowledge-base prepend
+// ---------------------------------------------------------------------------
+// Server-owned notes from the #knowledge-base channel are fetched once per
+// invocation batch and prepended to the text the agent sees. The persisted
+// user message is unchanged — only the in-flight `text` carries the block.
+
+const KNOWLEDGE_BUDGET_BYTES = 8 * 1024;
+
+async function buildKnowledgeBlock(db: Db, serverId: ObjectId): Promise<string | null> {
+  const docs = await db
+    .collection<KnowledgeDocDoc>(collections.knowledgeDocs)
+    .find({ serverId })
+    .sort({ updatedAt: -1 })
+    .limit(20)
+    .toArray();
+  if (docs.length === 0) return null;
+  const parts: string[] = [
+    '<knowledge_base>',
+    `(${docs.length} document${docs.length === 1 ? '' : 's'} from this server — treat as ground truth when relevant.)`,
+  ];
+  let used = 0;
+  for (const d of docs) {
+    const entry = `\n## ${d.title}\n${d.content.trim()}`;
+    const size = Buffer.byteLength(entry, 'utf8');
+    if (used + size > KNOWLEDGE_BUDGET_BYTES) {
+      const remaining = KNOWLEDGE_BUDGET_BYTES - used;
+      if (remaining > 500) parts.push(entry.slice(0, remaining) + '…');
+      break;
+    }
+    parts.push(entry);
+    used += size;
+  }
+  parts.push('</knowledge_base>');
+  return parts.join('\n');
+}
+
 export interface InvocationContext {
   db: Db;
   channel: ChannelDoc;
@@ -104,6 +141,10 @@ export async function startStreamingInvocation(
 ): Promise<StreamingHandle[]> {
   const handles: StreamingHandle[] = [];
   const chatId = chatIdForChannel(ctx.channel._id);
+  const knowledgeBlock = await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
+  const textForAgent = knowledgeBlock
+    ? `${knowledgeBlock}\n\n${ctx.userMessage.content}`
+    : ctx.userMessage.content;
   for (const agent of agents) {
     try {
       // INFT bundle decrypt (streaming path)
@@ -120,7 +161,7 @@ export async function startStreamingInvocation(
       const { streamId, upstreamUrl } = await openAgentStream({
         baseUrl: agent.baseUrl,
         chatId,
-        text: ctx.userMessage.content,
+        text: textForAgent,
         tenant: tenantInline ? undefined : agent.slug,
         tenantInline,
         envOverride,
@@ -154,12 +195,16 @@ export async function startStreamingInvocation(
 export async function runInvocation(ctx: InvocationContext, agents: AgentDoc[]): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
   const chatId = chatIdForChannel(ctx.channel._id);
+  const knowledgeBlock = await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
+  const textForAgent = knowledgeBlock
+    ? `${knowledgeBlock}\n\n${ctx.userMessage.content}`
+    : ctx.userMessage.content;
   for (const agent of agents) {
     try {
       const replyText = await invokeAgent({
         baseUrl: agent.baseUrl,
         chatId,
-        text: ctx.userMessage.content,
+        text: textForAgent,
         tenant: agent.slug,
       });
       const persisted = await insertMessage(ctx.db, {
@@ -400,6 +445,7 @@ async function runInvocationLinked(args: {
   const peerSlugs = await peerSlugsForChannel(args.db, args.channel);
   const speakerLabel = await speakerLabelFor(args.db, args.parent);
   const speakerIsHuman = args.parent.authorType === 'user';
+  const knowledgeBlock = await buildKnowledgeBlock(args.db, args.channel.serverId);
   for (const agent of args.agents) {
     const startMs = Date.now();
     try {
@@ -429,7 +475,7 @@ async function runInvocationLinked(args: {
         },
       });
 
-      const text = prepareInvocationText({
+      const baseText = prepareInvocationText({
         parent: args.parent,
         target: agent,
         channel: args.channel,
@@ -437,6 +483,7 @@ async function runInvocationLinked(args: {
         speakerLabel,
         speakerIsHuman,
       });
+      const text = knowledgeBlock ? `${knowledgeBlock}\n\n${baseText}` : baseText;
       let replyText = await invokeAgent({
         baseUrl: agent.baseUrl,
         chatId,

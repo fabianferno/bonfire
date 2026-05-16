@@ -11,6 +11,7 @@ import { BF_BRAND_EMOJI } from "@/lib/brand";
 import { appAgentAvatarSrc } from "@/lib/agent-identicon";
 import { resolveGreetingName, greetingUsesFallback } from "@/lib/greeting-name";
 import AuditLogPane from "@/components/audit/AuditLogPane";
+import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 
 export default function CenterPane() {
   const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
@@ -28,10 +29,16 @@ export default function CenterPane() {
 
   const isVoice = activeChannel.type === "voice";
   const isAudit = activeChannel.type === "audit";
+  const isKnowledge = activeChannel.type === "knowledge";
 
   // Audit channels get their own self-contained pane.
   if (isAudit) {
     return <AuditLogPane channelId={activeChannel.id} />;
+  }
+
+  // Knowledge base: list/manage shared docs that feed every agent.
+  if (isKnowledge) {
+    return <KnowledgePanel serverId={activeServerId} />;
   }
 
   return (

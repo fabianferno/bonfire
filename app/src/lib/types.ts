@@ -22,7 +22,7 @@ export interface BackendChannel {
   serverId: string;
   name: string;
   topic: string | null;
-  type: 'text' | 'voice' | 'audit';
+  type: 'text' | 'voice' | 'audit' | 'knowledge';
   defaultAgentId: string | null;
   position: number;
   cascadeEnabled: boolean;
@@ -77,6 +77,10 @@ export interface BackendMember {
   role: 'owner' | 'admin' | 'member';
   alias: string | null;
   joinedAt: string;
+  /** Populated by the backend for principalType==='user' (joined from users collection). */
+  username?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface BackendServerWallet {

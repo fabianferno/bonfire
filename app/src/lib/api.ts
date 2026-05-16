@@ -37,6 +37,16 @@ export function setAccessTokenProvider(fn: () => Promise<string | null>): void {
   tokenProvider = fn;
 }
 
+/**
+ * Resolve the current access token via the registered provider. Returns null
+ * when no provider is wired or when the user is unauthenticated. Use this
+ * from code paths that need the bearer token directly (e.g. multipart
+ * uploads where api() is not applicable).
+ */
+export async function getAccessToken(): Promise<string | null> {
+  return await tokenProvider();
+}
+
 export async function api<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,

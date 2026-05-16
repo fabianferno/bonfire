@@ -109,11 +109,31 @@ export interface ChannelDoc {
   serverId: ObjectId;
   name: string;
   topic: string | null;
-  type: 'text' | 'voice' | 'audit';
+  type: 'text' | 'voice' | 'audit' | 'knowledge';
   defaultAgentId: ObjectId | null;
   position: number;
   cascadeEnabled?: boolean;
   createdAt: Date;
+}
+
+/**
+ * Knowledge base document — one per server-uploaded note or file.
+ * Auto-fed into agent prompts when an agent is invoked in the same server,
+ * and queryable via /v1/servers/:sid/knowledge/search.
+ */
+export interface KnowledgeDocDoc {
+  _id: ObjectId;
+  serverId: ObjectId;
+  channelId: ObjectId;            // the knowledge-base channel that holds it
+  title: string;
+  content: string;                // utf-8 markdown or plain text
+  source: 'inline' | 'upload';
+  filename: string | null;        // original upload filename, when source==='upload'
+  mimeType: string | null;        // 'text/markdown' | 'text/plain' | null
+  sizeBytes: number;
+  createdBy: ObjectId;            // user._id
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface VoiceSessionDoc {
@@ -178,4 +198,5 @@ export const collections = {
   mintReservations: 'mintReservations',
   voiceSessions: 'voiceSessions',
   auditLog: 'auditLog',
+  knowledgeDocs: 'knowledgeDocs',
 } as const;

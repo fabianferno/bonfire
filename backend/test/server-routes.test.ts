@@ -21,8 +21,10 @@ describe('server routes', () => {
 
     const channels = await jsonReq(app, 'GET', `/v1/servers/${r.body.server.id}/channels`, undefined, me.token);
     expect(channels.status).toBe(200);
-    expect(channels.body.channels.length).toBe(3);
+    // 4 auto-created: general (text), general-voice (voice), audit-log (audit), knowledge-base (knowledge)
+    expect(channels.body.channels.length).toBe(4);
     expect(channels.body.channels.find((c: any) => c.name === 'general')).toBeDefined();
+    expect(channels.body.channels.find((c: any) => c.type === 'knowledge')).toBeDefined();
 
     const members = await jsonReq(app, 'GET', `/v1/servers/${r.body.server.id}/members`, undefined, me.token);
     expect(members.body.members.length).toBe(1);

@@ -86,6 +86,18 @@ export async function createServer(db: Db, input: CreateServerInput): Promise<{ 
   };
   await db.collection<ChannelDoc>(collections.channels).insertOne(auditChannel);
 
+  const knowledgeChannel: ChannelDoc = {
+    _id: new OID(),
+    serverId: server._id,
+    name: 'knowledge-base',
+    topic: 'Shared notes & docs — auto-fed into every agent on this server.',
+    type: 'knowledge',
+    defaultAgentId: null,
+    position: 3,
+    createdAt: now,
+  };
+  await db.collection<ChannelDoc>(collections.channels).insertOne(knowledgeChannel);
+
   return { server, defaultChannel, ownerMember };
 }
 

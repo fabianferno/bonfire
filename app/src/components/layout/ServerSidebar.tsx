@@ -5,6 +5,7 @@ import {
   Hash, Volume2, Plus, ChevronDown, Mic, MicOff, Headphones, Settings,
   UserPlus, Cog, BarChart2, PlusCircle, FolderPlus, CalendarPlus, AppWindow,
   Bell, Shield, LogOut, ShieldAlert, ScrollText, ShieldCheck, PhoneOff, Signal,
+  BookOpen,
 } from "lucide-react";
 import { useApp, type ChannelType, type AuditEntry } from "@/context/AppContext";
 import { useVoiceCtx } from "@/context/VoiceContext";
@@ -39,6 +40,8 @@ export default function ServerSidebar() {
 
   const textChannels  = activeServer.channels.filter(c => c.type === "text");
   const voiceChannels = activeServer.channels.filter(c => c.type === "voice");
+  // Knowledge channels are visible to all members.
+  const knowledgeChannels = activeServer.channels.filter(c => c.type === "knowledge");
   // Audit channels are visible only to the server owner.
   const auditChannels = isOwner ? activeServer.channels.filter(c => c.type === "audit") : [];
 
@@ -151,6 +154,21 @@ export default function ServerSidebar() {
               </div>
             );
           })}
+
+          {/* Knowledge channel — visible to all members */}
+          {knowledgeChannels.length > 0 && (
+            <>
+              <ChannelCategory label="Knowledge" onAdd={() => {}} />
+              {knowledgeChannels.map(ch => (
+                <KnowledgeChannelRow
+                  key={ch.id}
+                  name={ch.name}
+                  active={ch.id === activeChannelId}
+                  onClick={() => setActiveChannel(ch.id)}
+                />
+              ))}
+            </>
+          )}
 
           {/* Audit channels — owner only */}
           {auditChannels.length > 0 && (
@@ -354,6 +372,21 @@ function VoiceIconBtn({ children, title, active, onClick }: { children: React.Re
       className="flex-1 flex items-center justify-center h-7 rounded transition-colors hover:bg-[var(--bf-quinary)]"
       style={{ color: active ? "var(--bf-gray)" : "var(--bf-red)" }}>
       {children}
+    </button>
+  );
+}
+
+// ── Knowledge channel row (sidebar) ────────────────────────────────────────────
+
+function KnowledgeChannelRow({ name, active, onClick }: { name: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left text-sm transition-colors"
+      style={{ background: active ? "var(--bf-quinary)" : "transparent", color: active ? "white" : "var(--bf-senary)" }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+      <BookOpen size={18} style={{ color: active ? "var(--bf-fire)" : "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={1.5} />
+      <span className="truncate flex-1">{name}</span>
     </button>
   );
 }

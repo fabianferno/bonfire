@@ -58,4 +58,16 @@ export async function createIndexes(db: Db): Promise<void> {
     // TTL: drop ended sessions 1 hour after they expire
     { key: { expiresAt: 1 }, name: 'expiresAt_1_ttl', expireAfterSeconds: 3600 },
   ]);
+
+  // Knowledge docs: per-server lookups + text search for agent retrieval.
+  await db.collection(collections.knowledgeDocs).createIndexes([
+    { key: { serverId: 1, createdAt: -1 }, name: 'serverId_1_createdAt_-1' },
+    { key: { channelId: 1 }, name: 'channelId_1' },
+    {
+      key: { title: 'text', content: 'text' },
+      name: 'title_content_text',
+      weights: { title: 5, content: 1 },
+      default_language: 'english',
+    },
+  ]);
 }

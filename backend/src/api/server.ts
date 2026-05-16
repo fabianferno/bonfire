@@ -12,6 +12,7 @@ import { cascadeRoutes } from './routes/cascade.js';
 import { voiceRoutes } from './routes/voice.js';
 import { auditRoutes } from './routes/audit.js';
 import { siteRoutes } from './routes/sites.js';
+import { knowledgeRoutes } from './routes/knowledge.js';
 import { registerOgLlmProxy } from '../voice/og-llm-proxy.js';
 import type { InftDeps } from '../agents/invoker.js';
 import type { VoiceManager } from '../voice/manager.js';
@@ -83,6 +84,7 @@ export function buildApp(deps: AppDeps) {
   app.route('/', internalRoutes({ db: deps.db }));
   app.route('/', cascadeRoutes(deps));
   app.route('/', auditRoutes({ db: deps.db, jwtSecret: deps.jwtSecret }));
+  app.route('/', knowledgeRoutes({ db: deps.db, jwtSecret: deps.jwtSecret }));
   // Static-site routes: agent-published HTML at /sites/<slug>/. Public, no auth.
   app.route('/', siteRoutes());
   if (deps.voiceManager) {

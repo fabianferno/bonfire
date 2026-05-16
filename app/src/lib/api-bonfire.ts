@@ -1,4 +1,5 @@
-import { api } from './api';
+import { api, ApiError, getAccessToken } from './api';
+import { BONFIRE_BASE_URL } from './config';
 import type {
   BackendUser,
   BackendServer,
@@ -203,7 +204,74 @@ export const bf = {
       `/v1/channels/${cid}/audit${qs ? '?' + qs : ''}`,
     );
   },
+
+  // ── Knowledge base ──────────────────────────────────────────────────────────
+
+  listKnowledge: (sid: string) =>
+    api<{ docs: KnowledgeDoc[] }>('GET', `/v1/servers/${sid}/knowledge`),
+
+  getKnowledge: (sid: string, docId: string) =>
+    api<{ doc: KnowledgeDoc & { content: string } }>(
+      'GET',
+      `/v1/servers/${sid}/knowledge/${docId}`,
+    ),
+
+  createKnowledge: (sid: string, body: { title: string; content: string }) =>
+    api<{ doc: KnowledgeDoc }>('POST', `/v1/servers/${sid}/knowledge`, body),
+
+  deleteKnowledge: (sid: string, docId: string) =>
+    api<{ ok: true }>('DELETE', `/v1/servers/${sid}/knowledge/${docId}`),
+
+  uploadKnowledge: async (
+    sid: string,
+    args: { file: File; title?: string },
+  ): Promise<{ doc: KnowledgeDoc }> => {
+    const fd = new FormData();
+    fd.append('file', args.file);
+    if (args.title) fd.append('title', args.title);
+    // Use a custom fetch — the shared `api()` helper assumes JSON bodies.
+    const tok = await getAccessToken();
+    const headers: Record<string, string> = {};
+    if (tok) headers['authorization'] = `Bearer ${tok}`;
+    const res = await fetch(`${BONFIRE_BASE_URL}/v1/servers/${sid}/knowledge/upload`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const text = await res.text();
+    const data = text ? safeJsonForBf(text) : null;
+    if (!res.ok) {
+      const msg =
+        data && typeof data === 'object' && data !== null && 'error' in data
+          ? String((data as Record<string, unknown>).error)
+          : `HTTP ${res.status}`;
+      throw new ApiError(res.status, data, msg);
+    }
+    return data as { doc: KnowledgeDoc };
+  },
 };
+
+function safeJsonForBf(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}
+
+export interface KnowledgeDoc {
+  id: string;
+  serverId: string;
+  channelId: string;
+  title: string;
+  source: 'inline' | 'upload';
+  filename: string | null;
+  mimeType: string | null;
+  sizeBytes: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface InstalledSkillSource {
   slug?: string;

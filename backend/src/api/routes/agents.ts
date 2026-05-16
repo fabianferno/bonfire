@@ -14,22 +14,14 @@ import { collections } from '../../db/types.js';
 import type { AgentDoc, MintReservationDoc, UserDoc } from '../../db/types.js';
 
 /**
- * Ownership check that survives legacy + INFT-minted agents.
+ * DEMO MODE: ownership gating disabled — any authenticated user can manage
+ * any agent (install skills, edit MCP, etc.). The auth middleware still runs
+ * upstream, so unauthenticated requests are still rejected at the edge.
  *
- * Two valid paths:
- *   1. `createdBy.equals(user._id)` — the user who originally registered the
- *      agent. Missing on seeded / legacy agents (createdBy is null), which is
- *      why a direct `.equals()` crashes the route with TypeError.
- *   2. `ownerWallet === user.walletAddress` — the on-chain INFT owner. Catches
- *      cases where ownership transferred or the agent was minted before the
- *      route owner concept existed.
+ * Re-enable by restoring the createdBy / ownerWallet checks below.
  */
-function canManageAgent(a: AgentDoc, user: UserDoc): boolean {
-  if (a.createdBy && a.createdBy.equals(user._id)) return true;
-  if (a.ownerWallet && user.walletAddress) {
-    return a.ownerWallet.toLowerCase() === user.walletAddress.toLowerCase();
-  }
-  return false;
+function canManageAgent(_a: AgentDoc, _user: UserDoc): boolean {
+  return true;
 }
 import { encryptAesGcm, packEnvelope, sealEcies, pubkeyFromPrivkey } from '../../crypto/index.js';
 import { createOgStorage } from '../../storage-0g/index.js';

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Avatar from "boring-avatars";
+import Avatar from "@/components/shared/BoringAvatar";
 import { useApp } from "@/context/AppContext";
 import Modal, { ModalLabel, ModalInput } from "@/components/shared/Modal";
 import WalletFundingModal from "@/components/server/WalletFundingModal";

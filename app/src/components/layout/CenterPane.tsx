@@ -93,6 +93,7 @@ export default function CenterPane() {
           <MessageComposer
             channel={activeChannel}
             onSend={text => sendMessage(activeServerId, activeChannelId, text)}
+            agents={activeServer.agents}
           />
         </>
       )}

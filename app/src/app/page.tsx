@@ -66,6 +66,7 @@ export default function LandingPage() {
             <a href="#how" className="hover:text-white transition-colors">How it works</a>
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#stack" className="hover:text-white transition-colors">0G Stack</a>
+            <Link href="/pitch" className="hover:text-white transition-colors">Pitch</Link>
             <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
           </nav>
           <Link

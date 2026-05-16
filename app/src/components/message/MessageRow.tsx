@@ -4,16 +4,42 @@ import { ShieldCheck, ShieldAlert, ChevronRight, ChevronDown, Wrench } from "luc
 import type { Message } from "@/context/AppContext";
 import Avatar from "@/components/shared/Avatar";
 
-// Tool call block — thread-style expandable
+interface ToolCall {
+  name: string;
+  inputLines: string[];
+  outputLines: string[];
+}
+
+function parseToolCalls(content: string): ToolCall[] {
+  const lines = content.split("\n").filter(Boolean);
+  const calls: ToolCall[] = [];
+  let current: ToolCall | null = null;
+
+  for (const line of lines) {
+    if (line.startsWith("[tool:")) {
+      if (current) calls.push(current);
+      const nameMatch = line.match(/^\[tool:\s*([^\]]+)\]/);
+      const name = nameMatch ? nameMatch[1].trim() : "tool";
+      const rest = line.replace(/^\[tool:[^\]]+\]\s*/, "").trim();
+      current = { name, inputLines: rest ? [rest] : [], outputLines: [] };
+    } else if (line.startsWith("→")) {
+      if (!current) current = { name: "tool", inputLines: [], outputLines: [] };
+      current.inputLines.push(line.slice(1).trim());
+    } else if (line.startsWith("←")) {
+      if (!current) current = { name: "tool", inputLines: [], outputLines: [] };
+      current.outputLines.push(line.slice(1).trim());
+    }
+  }
+  if (current) calls.push(current);
+  return calls;
+}
+
+// Tool call block — Discord-thread style
 function ToolCallThread({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
+  const calls = parseToolCalls(content);
 
-  // Parse lines that look like: [tool: name] input / output
-  const lines = content.split("\n").filter(Boolean);
-  const toolLines = lines.filter(l => l.startsWith("[tool:") || l.startsWith("→") || l.startsWith("←"));
-  const otherLines = lines.filter(l => !l.startsWith("[tool:") && !l.startsWith("→") && !l.startsWith("←"));
-
-  if (toolLines.length === 0) return null;
+  if (calls.length === 0) return null;
 
   return (
     <div className="mt-2">
@@ -27,31 +53,56 @@ function ToolCallThread({ content }: { content: string }) {
         }}
       >
         <Wrench size={12} strokeWidth={2} />
-        <span className="font-semibold">{toolLines.length} tool call{toolLines.length !== 1 ? "s" : ""}</span>
+        <span className="font-semibold">{calls.length} tool call{calls.length !== 1 ? "s" : ""}</span>
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
       </button>
+
       {open && (
-        <div
-          className="mt-1.5 rounded-lg overflow-hidden"
-          style={{ border: "1px solid var(--bf-quinary)" }}
-        >
-          {toolLines.map((line, i) => {
-            const isInput = line.startsWith("[tool:") || line.startsWith("→");
-            const isOutput = line.startsWith("←");
-            return (
+        <div className="mt-2 flex gap-0">
+          {/* Discord-style vertical thread connector */}
+          <div
+            className="flex-shrink-0 rounded-full"
+            style={{ width: 2, background: "var(--bf-accent)", opacity: 0.5, marginLeft: 10, marginRight: 10 }}
+          />
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
+            {calls.map((call, i) => (
               <div
                 key={i}
-                className="px-3 py-2 text-xs font-mono"
-                style={{
-                  background: i % 2 === 0 ? "var(--bf-quaternary)" : "var(--bf-tertiary)",
-                  color: isOutput ? "var(--bf-fire)" : isInput ? "var(--bf-accent)" : "var(--bf-gray)",
-                  borderTop: i > 0 ? "1px solid var(--bf-quinary)" : "none",
-                }}
+                className="rounded-lg overflow-hidden"
+                style={{ border: "1px solid var(--bf-quinary)" }}
               >
-                {line}
+                {/* Tool name chip */}
+                <div
+                  className="flex items-center gap-1.5 px-3 py-1.5"
+                  style={{ background: "var(--bf-quaternary)", borderBottom: "1px solid var(--bf-quinary)" }}
+                >
+                  <Wrench size={10} strokeWidth={2} style={{ color: "var(--bf-accent)" }} />
+                  <code className="text-xs font-bold" style={{ color: "var(--bf-accent)" }}>{call.name}</code>
+                </div>
+
+                {/* Input */}
+                {call.inputLines.length > 0 && (
+                  <div className="px-3 py-2" style={{ background: "var(--bf-tertiary)" }}>
+                    {call.inputLines.map((l, j) => (
+                      <p key={j} className="text-xs font-mono leading-relaxed" style={{ color: "var(--bf-gray)" }}>{l}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Output */}
+                {call.outputLines.length > 0 && (
+                  <div
+                    className="px-3 py-2"
+                    style={{ background: "var(--bf-primary)", borderTop: "1px solid var(--bf-quinary)" }}
+                  >
+                    {call.outputLines.map((l, j) => (
+                      <p key={j} className="text-xs font-mono leading-relaxed" style={{ color: "var(--bf-fire)" }}>{l}</p>
+                    ))}
+                  </div>
+                )}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>

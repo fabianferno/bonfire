@@ -1,11 +1,13 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Plus, Smile, Gift, Volume2 } from "lucide-react";
-import type { Channel } from "@/context/AppContext";
+import type { Channel, Agent } from "@/context/AppContext";
+import Avatar from "@/components/shared/Avatar";
 
 interface Props {
   channel: Channel;
   onSend: (text: string) => void;
+  agents?: Agent[];
 }
 
 const SLASH_COMMANDS = [
@@ -18,29 +20,58 @@ const SLASH_COMMANDS = [
   { cmd: "/help",     desc: "Show all commands" },
 ];
 
-export default function MessageComposer({ channel, onSend }: Props) {
+export default function MessageComposer({ channel, onSend, agents = [] }: Props) {
   const [text, setText] = useState("");
-  const [showCommands, setShowCommands] = useState(false);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionDismissed, setMentionDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Detect @mention at the tail of the input (no space after @)
+  const mentionMatch = text.match(/@([a-z0-9_-]*)$/i);
+  const mentionPartial = mentionMatch ? mentionMatch[1].toLowerCase() : null;
+
+  const filteredAgents = mentionPartial !== null && !mentionDismissed
+    ? agents.filter(a =>
+        (a.slug ?? a.name).toLowerCase().includes(mentionPartial) ||
+        a.name.toLowerCase().includes(mentionPartial)
+      ).slice(0, 6)
+    : [];
 
   const filteredCmds = SLASH_COMMANDS.filter(c =>
     text.startsWith("/") && c.cmd.startsWith(text.split(" ")[0])
   );
 
-  useEffect(() => {
-    setShowCommands(text.startsWith("/") && filteredCmds.length > 0);
-  }, [text, filteredCmds.length]);
+  const showMentions = filteredAgents.length > 0;
+  const showCommands = !showMentions && text.startsWith("/") && filteredCmds.length > 0;
+
+  const insertMention = (agent: Agent) => {
+    const slug = agent.slug ?? agent.name.toLowerCase().replace(/\s+/g, "-");
+    setText(prev => prev.replace(/@([a-z0-9_-]*)$/i, `@${slug} `));
+    setMentionDismissed(false);
+    inputRef.current?.focus();
+  };
 
   const send = () => {
     if (!text.trim()) return;
     onSend(text);
     setText("");
-    setShowCommands(false);
+    setMentionDismissed(false);
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
+    if (showMentions) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, filteredAgents.length - 1)); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); insertMention(filteredAgents[mentionIndex]); return; }
+      if (e.key === "Escape") { setMentionDismissed(true); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-    if (e.key === "Escape") setShowCommands(false);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    setMentionDismissed(false);
+    setMentionIndex(0);
   };
 
   if (channel.type === "voice") {
@@ -65,6 +96,36 @@ export default function MessageComposer({ channel, onSend }: Props) {
 
   return (
     <div className="px-4 pb-6 relative">
+      {/* @ mention autocomplete */}
+      {showMentions && (
+        <div
+          className="absolute bottom-full left-4 right-4 mb-1 rounded-lg overflow-hidden shadow-2xl border"
+          style={{ background: "var(--bf-quaternary)", borderColor: "var(--bf-quinary)" }}
+        >
+          <p
+            className="text-xs px-3 py-1.5 uppercase tracking-wider font-semibold border-b"
+            style={{ color: "var(--bf-gray)", borderColor: "var(--bf-quinary)" }}
+          >
+            Agents
+          </p>
+          {filteredAgents.map((agent, i) => (
+            <button
+              key={agent.id}
+              onClick={() => insertMention(agent)}
+              className="flex items-center gap-3 w-full px-3 py-2 text-left transition-colors"
+              style={{ background: i === mentionIndex ? "var(--bf-quinary)" : "transparent" }}
+              onMouseEnter={() => setMentionIndex(i)}
+            >
+              <Avatar name={agent.name} size={24} src={agent.avatar} color="var(--bf-fire)" className="flex-shrink-0" />
+              <span className="text-sm font-semibold text-white">{agent.name}</span>
+              {agent.slug && (
+                <span className="text-xs font-mono" style={{ color: "var(--bf-gray)" }}>@{agent.slug}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Slash command autocomplete */}
       {showCommands && (
         <div
@@ -82,7 +143,6 @@ export default function MessageComposer({ channel, onSend }: Props) {
               key={c.cmd}
               onClick={() => {
                 setText(c.cmd + " ");
-                setShowCommands(false);
                 inputRef.current?.focus();
               }}
               className="flex items-center gap-3 w-full px-3 py-2 text-left transition-colors hover:bg-[var(--bf-quinary)]"
@@ -114,7 +174,7 @@ export default function MessageComposer({ channel, onSend }: Props) {
           ref={inputRef}
           type="text"
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKey}
           placeholder={`Message #${channel.name}`}
           className="flex-1 bg-transparent py-2.5 text-sm text-white focus:outline-none placeholder-[var(--bf-gray)]"

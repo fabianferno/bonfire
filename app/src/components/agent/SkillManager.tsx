@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { Search, Trash2, Zap, Loader2, ShieldAlert, Plus, X } from "lucide-react";
-import { bf, type DiscoveredSkill, type InstalledSkill } from "@/lib/api-bonfire";
+import { bf, type DiscoveredSkill, type InstalledSkill, type InstalledSkillSource } from "@/lib/api-bonfire";
 import { ApiError } from "@/lib/api";
 
 interface Props {
@@ -12,6 +12,16 @@ interface Props {
   /** Pending queue for create flow — when agentId is null, selections go here instead of API. */
   pending?: DiscoveredSkill[];
   onPendingChange?: (next: DiscoveredSkill[]) => void;
+}
+
+function formatSource(source: InstalledSkill["source"]): string | undefined {
+  if (!source) return undefined;
+  if (typeof source === "string") return source;
+  const s = source as InstalledSkillSource;
+  if (s.owner && s.slug) return `${s.owner}/${s.slug}`;
+  if (s.slug) return s.slug;
+  if (s.sourceUrl) return s.sourceUrl;
+  return undefined;
 }
 
 export default function SkillManager({ agentId, canManage = true, pending, onPendingChange }: Props) {
@@ -149,8 +159,8 @@ export default function SkillManager({ agentId, canManage = true, pending, onPen
                   {s.description && (
                     <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{s.description}</p>
                   )}
-                  {s.source && (
-                    <p className="text-xs mt-1 font-mono" style={{ color: "var(--bf-symbol)" }}>{s.source}</p>
+                  {formatSource(s.source) && (
+                    <p className="text-xs mt-1 font-mono" style={{ color: "var(--bf-symbol)" }}>{formatSource(s.source)}</p>
                   )}
                 </div>
                 {canManage && (

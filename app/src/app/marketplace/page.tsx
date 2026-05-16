@@ -209,9 +209,13 @@ function AgentDetailOverlay({
 }) {
   const [agent, setAgent] = useState(initialAgent);
   const [showEdit, setShowEdit] = useState(false);
-  const { walletAddress } = useAuth();
-  const isCreator = !!walletAddress && !!agent.ownerWallet &&
-    agent.ownerWallet.toLowerCase() === walletAddress.toLowerCase();
+  const { walletAddress, user: authUser } = useAuth();
+  const isCreator =
+    // match by Mongo user id (most reliable after backend verify)
+    (!!authUser?.id && !!agent.createdBy && agent.createdBy === authUser.id) ||
+    // fallback: match by wallet address
+    (!!walletAddress && !!agent.ownerWallet &&
+      agent.ownerWallet.toLowerCase() === walletAddress.toLowerCase());
 
   const agentPrice = parseFloat(agent.priceOg ?? '0');
   const priced = Number.isFinite(agentPrice) && agentPrice > 0;

@@ -47,10 +47,34 @@ export async function installSkill(
     log.warn({ source, slug: req.slug, msg }, 'skill install: registry client failed');
     return { ok: false, reason: `registry_install_failed: ${msg}` };
   }
-  const skillMdPath = path.join(installed.dir, 'SKILL.md');
+  // Registry clients (especially agentskill.sh's CLI) don't always land the
+  // SKILL.md at the path we predicted from the slug — it may be nested one
+  // level deeper, or live next to the targetDir if the CLI chose its own
+  // folder name. Locate it dynamically + accept lowercase variants.
+  let skillMdPath: string | null = null;
   let content = '';
-  try { content = await fs.readFile(skillMdPath, 'utf8'); }
-  catch { await fs.rm(installed.dir, { recursive: true, force: true }); return { ok: false, reason: 'no SKILL.md found' }; }
+  try {
+    skillMdPath = await findSkillMd(installed.dir);
+    // Some CLIs unpack into targetDir/<other-name>/ — search the parent too.
+    if (!skillMdPath) {
+      const parent = path.dirname(installed.dir);
+      skillMdPath = await findSkillMd(parent, /*maxDepth*/ 2, /*exclude*/ installed.dir);
+    }
+    if (skillMdPath) {
+      content = await fs.readFile(skillMdPath, 'utf8');
+      // Re-point installed.dir to wherever the SKILL.md actually lives so
+      // downstream code (scanner, scanContent, dir return value) works.
+      installed.dir = path.dirname(skillMdPath);
+    }
+  } catch { /* fall through to the not-found branch */ }
+  if (!skillMdPath || !content) {
+    // Surface the directory listing so callers can see WHAT got installed.
+    let listing: string[] = [];
+    try { listing = (await listTreeShallow(installed.dir, 3)).slice(0, 40); } catch { /* ignore */ }
+    await fs.rm(installed.dir, { recursive: true, force: true }).catch(() => {});
+    log.warn({ source, slug: req.slug, dir: installed.dir, listing }, 'skill install: no SKILL.md');
+    return { ok: false, reason: `no SKILL.md found (installed dir contained: ${listing.join(', ') || '(empty)'})` };
+  }
 
   const findings = scanContent(content);
   if (findings.critical.length > 0) {
@@ -66,6 +90,51 @@ export async function installSkill(
     }
   }
   return { ok: true, slug: installed.slug, dir: installed.dir, findings };
+}
+
+/**
+ * Walk `root` up to `maxDepth` levels deep looking for a file named SKILL.md
+ * (case-insensitive). Returns the first match, or null. `exclude` lets us
+ * skip a subtree we've already searched.
+ */
+async function findSkillMd(root: string, maxDepth = 3, exclude?: string): Promise<string | null> {
+  async function walk(dir: string, depth: number): Promise<string | null> {
+    if (depth > maxDepth) return null;
+    let entries: import('node:fs').Dirent[];
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return null; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (exclude && full === exclude) continue;
+      if (e.isFile() && e.name.toLowerCase() === 'skill.md') return full;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const full = path.join(dir, e.name);
+      if (exclude && full === exclude) continue;
+      const hit = await walk(full, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  return walk(root, 0);
+}
+
+/** Shallow tree listing used in error messages so we can see what got installed. */
+async function listTreeShallow(root: string, maxDepth = 2): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string, depth: number, prefix: string) {
+    if (depth > maxDepth) return;
+    let entries: import('node:fs').Dirent[];
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      out.push(prefix + e.name + (e.isDirectory() ? '/' : ''));
+      if (e.isDirectory() && depth < maxDepth) {
+        await walk(path.join(dir, e.name), depth + 1, prefix + e.name + '/');
+      }
+    }
+  }
+  await walk(root, 0, '');
+  return out;
 }
 
 export async function removeSkill(agentDir: string, slug: string): Promise<boolean> {

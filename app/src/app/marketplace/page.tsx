@@ -518,12 +518,12 @@ function MarketplaceInner() {
                                 <FlameAvatar
                                   slug={agent.slug}
                                   avatarUrl={agent.avatarUrl}
-                                  size={36}
+                                  size={52}
                                   className="absolute bottom-0 left-3 z-10 translate-y-1/2 border-2"
                                   style={{ borderRadius: '0.5rem', borderColor: 'var(--bf-secondary)' }}
                                 />
                               </div>
-                              <div className="pt-7 px-4 pb-4 flex flex-col gap-2">
+                              <div className="pt-9 px-4 pb-4 flex flex-col gap-2">
                                 <div className="flex items-start justify-between">
                                   <div>
                                     <div className="flex items-center gap-1.5 mb-1">

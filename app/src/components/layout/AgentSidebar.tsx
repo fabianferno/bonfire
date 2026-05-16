@@ -11,8 +11,9 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
 
 export default function AgentSidebar() {
   const router = useRouter();
-  const { activeServer } = useApp();
+  const { activeServer, activeChannel } = useApp();
   const agents = activeServer?.agents ?? [];
+  const showFlame = !!activeChannel && (activeChannel.messages?.length ?? 0) > 0;
 
   const grouped = STATUS_ORDER.reduce((acc, status) => {
     const group = agents.filter(a => a.status === status);
@@ -23,7 +24,7 @@ export default function AgentSidebar() {
   const isEmpty = agents.length === 0;
 
   return (
-    <aside className="w-64 flex flex-col flex-shrink-0 overflow-y-auto" style={{ background: "var(--bf-secondary)" }}>
+    <aside className="w-64 flex flex-col flex-shrink-0 overflow-hidden" style={{ background: "var(--bf-secondary)" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 h-14 border-b flex-shrink-0" style={{ borderColor: "var(--bf-quinary)" }}>
         <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "var(--bf-gray)" }}>
@@ -50,7 +51,13 @@ export default function AgentSidebar() {
       </div>
 
       {/* Agent list */}
-      <div className="flex-1 px-2 py-2">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-2 py-2"
+        style={{
+          background:
+            "var(--bf-secondary)",
+        }}
+      >
         {isEmpty ? (
           <EmptyState onBrowse={() => router.push("/marketplace")} hasServer={!!activeServer} />
         ) : (
@@ -68,6 +75,17 @@ export default function AgentSidebar() {
           })
         )}
       </div>
+
+      {showFlame && (
+        <div className="flex-shrink-0 flex items-center justify-center pb-2 pointer-events-none">
+          <iframe
+            src="/flame.html"
+            title="flame"
+            aria-label="BonFire"
+            style={{ width: 220, height: 220, border: 0, background: "transparent", display: "block" }}
+          />
+        </div>
+      )}
     </aside>
   );
 }

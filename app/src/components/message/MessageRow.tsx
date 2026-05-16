@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ShieldCheck, ShieldAlert, ChevronRight, ChevronDown, Wrench } from "lucide-react";
 import type { Message } from "@/context/AppContext";
 import Avatar from "@/components/shared/Avatar";
+import FlameAvatar from "@/components/shared/FlameAvatar";
 import { useApp } from "@/context/AppContext";
 import AgentProfileModal from "@/components/agent/AgentProfileModal";
 
@@ -137,13 +138,23 @@ export default function MessageRow({ msg }: { msg: Message }) {
       onMouseEnter={e => (e.currentTarget.style.background = "var(--bf-quinary)")}
       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
-      <Avatar
-        name={msg.author}
-        size={42}
-        color={msg.isBot ? "#fb923c" : "var(--bf-plum)"}
-        src={msg.avatar}
-        className="mt-0.5 flex-shrink-0"
-      />
+      {msg.isBot ? (
+        <FlameAvatar
+          slug={agentObj?.slug || agentObj?.id || msg.author}
+          avatarUrl={agentObj?.avatar ?? msg.avatar}
+          size={42}
+          className="mt-0.5"
+          alt={msg.author}
+        />
+      ) : (
+        <Avatar
+          name={msg.author}
+          size={42}
+          color="var(--bf-plum)"
+          src={msg.avatar}
+          className="mt-0.5 flex-shrink-0"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
           {msg.isBot && agentObj ? (

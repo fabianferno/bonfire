@@ -53,6 +53,12 @@ async function loadBroker(): Promise<{ createZGComputeNetworkBroker: (wallet: et
 /**
  * Initialise a 0G broker for one specific wallet — ensure ledger, pick a
  * service. Idempotent and cached by wallet address.
+ *
+ * Auto top-up: the 0G SDK requires ≥ 3 OG to *create* a ledger. If the
+ * caller's wallet is below that threshold, the platform wallet
+ * (DEPLOYER_PRIVATE_KEY) sends it just enough to bootstrap. Subsequent
+ * inference still bills the caller's wallet (ledger ownership doesn't
+ * change). One-time cold-start cost per server, then self-sufficient.
  */
 async function initBrokerForWallet(privateKey: string): Promise<OgLlmProxyState | null> {
   const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
@@ -72,19 +78,53 @@ async function initBrokerForWallet(privateKey: string): Promise<OgLlmProxyState 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const broker: any = await createZGComputeNetworkBroker(wallet as any);
 
-  // Ensure ledger exists (3 OG minimum; charged from wallet balance).
+  // Ensure ledger exists. If absent, auto top-up from platform wallet to
+  // meet the 3 OG SDK minimum, then create.
   try { await broker.ledger.getLedger(); }
   catch {
+    const reserve = 0.2;          // OG kept for gas
+    const ledgerSeed = 3.0;       // SDK floor
     const balanceWei = await provider.getBalance(address);
-    const balanceOg = Number(ethers.formatEther(balanceWei));
-    const reserve = 0.2;
-    const amount = Math.max(balanceOg - reserve, 0);
-    if (amount < 3) {
-      const reason = `0G ledger requires min 3 OG; ${address} has ${balanceOg.toFixed(4)} OG`;
-      failReasons.set(address, reason);
-      log.error({ wallet: address, balanceOg }, '0G LLM proxy: insufficient balance for ledger');
-      return null;
+    let balanceOg = Number(ethers.formatEther(balanceWei));
+
+    if (balanceOg < ledgerSeed + reserve) {
+      const topupPk = process.env.DEPLOYER_PRIVATE_KEY || process.env.STORAGE_UPLOADER_PRIVATE_KEY;
+      if (!topupPk) {
+        const reason = `${address} has ${balanceOg.toFixed(4)} OG; no DEPLOYER_PRIVATE_KEY for auto top-up`;
+        failReasons.set(address, reason);
+        log.error({ wallet: address, balanceOg }, '0G LLM proxy: top-up wallet unavailable');
+        return null;
+      }
+      const platformWallet = new ethers.Wallet(topupPk, provider);
+      // Avoid self-topup (would loop if the env wallet is the same as the caller)
+      if (platformWallet.address.toLowerCase() === address.toLowerCase()) {
+        const reason = `${address} has ${balanceOg.toFixed(4)} OG; cannot self-topup (it IS the platform wallet)`;
+        failReasons.set(address, reason);
+        log.error({ wallet: address, balanceOg }, '0G LLM proxy: caller is the platform wallet, refuse self-topup');
+        return null;
+      }
+      const need = ledgerSeed + reserve - balanceOg + 0.05; // small headroom
+      const needWei = ethers.parseEther(need.toFixed(6));
+      log.warn(
+        { server: address, fundedBy: platformWallet.address, amountOg: need.toFixed(4) },
+        '0G LLM proxy: auto top-up — server wallet below ledger floor',
+      );
+      try {
+        const tx = await platformWallet.sendTransaction({ to: address, value: needWei });
+        await tx.wait();
+        // Refresh balance.
+        const newWei = await provider.getBalance(address);
+        balanceOg = Number(ethers.formatEther(newWei));
+        log.info({ server: address, balanceOg: balanceOg.toFixed(4), txHash: tx.hash }, '0G LLM proxy: top-up confirmed');
+      } catch (e) {
+        const reason = `auto top-up failed: ${(e as Error).message?.slice(0, 180) ?? String(e)}`;
+        failReasons.set(address, reason);
+        log.error({ wallet: address, err: e }, '0G LLM proxy: top-up tx failed');
+        return null;
+      }
     }
+
+    const amount = Math.max(balanceOg - reserve, ledgerSeed);
     log.info({ wallet: address, amount }, '0G LLM proxy: creating ledger');
     await broker.ledger.addLedger(amount);
   }

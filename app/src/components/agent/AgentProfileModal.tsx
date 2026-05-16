@@ -3,8 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { ShieldCheck, ChevronRight, ChevronDown, Terminal, AlertTriangle, Info, Wrench, Plus, Trash2, Server, Loader2, Sparkles, ExternalLink, Copy, Check, Lock, FileText, Key, Flame, Box } from "lucide-react";
 import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
-import Avatar from "@/components/shared/Avatar";
-import { appAgentAvatarSrc } from "@/lib/agent-identicon";
+import FlameAvatar from "@/components/shared/FlameAvatar";
 import { BF_DISPLAY_AGENT_MODEL } from "@/lib/brand";
 import SkillManager from "./SkillManager";
 import { bf, type McpServerConfig } from "@/lib/api-bonfire";
@@ -31,11 +30,11 @@ export default function AgentProfileModal({ agent, onClose }: Props) {
       {/* Header */}
       <div className="flex items-center gap-4 pb-4" style={{ borderBottom: "1px solid var(--bf-quinary)" }}>
         <div className="relative flex-shrink-0">
-          <Avatar
-            name={agent.name}
-            emoji={agent.emoji}
+          <FlameAvatar
+            slug={agent.slug || agent.id}
+            avatarUrl={agent.avatar}
             size={64}
-            src={appAgentAvatarSrc(agent)}
+            alt={agent.name}
           />
           <span
             className="absolute rounded-full"

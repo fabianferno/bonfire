@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { MessageSquare, Plus, X } from "lucide-react";
-import { dmSessionAvatarImageUrl } from "@/lib/agent-identicon";
+import FlameAvatar from "@/components/shared/FlameAvatar";
 
 export interface DmSession {
   agentId: string;
@@ -49,13 +49,12 @@ function timeAgo(iso: string) {
 }
 
 function AgentAvatar({ session, size = 36 }: { session: DmSession; size?: number }) {
-  const src = dmSessionAvatarImageUrl(session.agentAvatar, session.agentSlug);
   return (
-    <img
-      src={src}
-      alt=""
-      className="rounded-full object-cover flex-shrink-0 bg-[var(--bf-quaternary)]"
-      style={{ width: size, height: size }}
+    <FlameAvatar
+      slug={session.agentSlug}
+      avatarUrl={session.agentAvatar}
+      size={size}
+      alt={session.agentName}
     />
   );
 }

@@ -24,6 +24,7 @@ import { ApiError } from '@/lib/api';
 import { bf, type DiscoveredSkill } from '@/lib/api-bonfire';
 import type { BackendAgent } from '@/lib/types';
 import { identiconUrl } from '@/lib/agent-identicon';
+import FlameAvatar from '@/components/shared/FlameAvatar';
 import Modal, { ModalLabel, ModalInput, ModalTextarea } from '@/components/shared/Modal';
 import SkillSearchPicker from '@/components/agent/SkillSearchPicker';
 import { MintProgress, type MintStep } from './MintProgress';
@@ -630,19 +631,9 @@ export default function CreateAgentModal({ onClose, onCreated }: Props) {
           <div>
             <ModalLabel style={CREATE_AGENT_LABEL_STYLE}>Avatar</ModalLabel>
             <div className="flex items-center gap-3">
-              <div
-                className="w-14 h-14 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-                style={{ background: 'var(--bf-tertiary)', border: '1px solid var(--bf-quinary)' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={identiconUrl(fields.slug)}
-                  alt=""
-                  className="w-full h-full"
-                />
-              </div>
+              <FlameAvatar slug={fields.slug} size={56} />
               <p className="text-xs" style={{ color: 'var(--bf-gray)' }}>
-                Auto-generated identicon, seeded from your handle. Updates as you type the name.
+                Auto-generated flame, seeded from your handle. Updates as you type the name.
               </p>
             </div>
           </div>

@@ -1,8 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { Agent } from "@/context/AppContext";
-import Avatar from "@/components/shared/Avatar";
-import { appAgentAvatarSrc } from "@/lib/agent-identicon";
+import FlameAvatar from "@/components/shared/FlameAvatar";
 import AgentProfileModal from "./AgentProfileModal";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -26,11 +25,11 @@ export default function AgentSidebarRow({ agent }: { agent: Agent }) {
       >
         {/* Avatar with presence ring */}
         <div className="relative flex-shrink-0">
-          <Avatar
-            name={agent.name}
+          <FlameAvatar
+            slug={agent.slug || agent.id}
+            avatarUrl={agent.avatar}
             size={36}
-            emoji={agent.emoji}
-            src={appAgentAvatarSrc(agent)}
+            alt={agent.name}
           />
           {/* Presence dot — circle with white border, positioned bottom-right */}
           <span

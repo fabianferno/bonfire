@@ -5,7 +5,7 @@ import { Send, Bot, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import LeftNav from "@/components/layout/LeftNav";
 import DmSidebar, { getDmSessions, upsertDmSession, type DmSession } from "@/components/dm/DmSidebar";
-import { dmSessionAvatarImageUrl } from "@/lib/agent-identicon";
+import FlameAvatar from "@/components/shared/FlameAvatar";
 
 interface DmMessage {
   id: string;
@@ -34,13 +34,12 @@ function now() {
 }
 
 function AgentAvatar({ session, size = 40 }: { session: DmSession; size?: number }) {
-  const src = dmSessionAvatarImageUrl(session.agentAvatar, session.agentSlug);
   return (
-    <img
-      src={src}
-      alt=""
-      className="rounded-full object-cover flex-shrink-0 bg-[var(--bf-quaternary)]"
-      style={{ width: size, height: size }}
+    <FlameAvatar
+      slug={session.agentSlug}
+      avatarUrl={session.agentAvatar}
+      size={size}
+      alt={session.agentName}
     />
   );
 }

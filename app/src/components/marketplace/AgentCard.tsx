@@ -1,6 +1,6 @@
 'use client';
 import type { BackendAgent } from '@/lib/types';
-import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
+import FlameAvatar from '@/components/shared/FlameAvatar';
 
 interface Props {
   agent: BackendAgent;
@@ -14,11 +14,7 @@ export default function AgentCard({ agent, onInvite }: Props) {
       style={{ background: 'var(--bf-secondary)' }}
     >
       <div className="flex items-start gap-3">
-        <img
-          src={agentAvatarDisplayUrl(agent)}
-          alt={agent.name}
-          className="w-12 h-12 rounded-full object-cover flex-shrink-0 bg-[var(--bf-quaternary)]"
-        />
+        <FlameAvatar slug={agent.slug} avatarUrl={agent.avatarUrl} size={48} alt={agent.name} />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-white truncate">{agent.name}</h3>
           <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>

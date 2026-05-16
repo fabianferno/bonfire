@@ -14,7 +14,7 @@ import Avatar from "@/components/shared/Avatar";
 import WalletPanel from "@/components/server/WalletPanel";
 
 export default function ServerSidebar() {
-  const { activeServer, activeChannelId, setActiveChannel, setActiveVoiceChannelId, createChannel, user, leaveServer, activeServerId } = useApp();
+  const { activeServer, activeChannelId, setActiveChannel, createChannel, user, leaveServer, activeServerId } = useApp();
   const voice = useVoiceCtx();
 
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -73,9 +73,6 @@ export default function ServerSidebar() {
 
   const handleVoiceChannelClick = async (chId: string, chName: string) => {
     setActiveChannel(chId);
-    // Open the Daily-powered VoiceRoom overlay
-    setActiveVoiceChannelId(chId);
-    // Also join legacy WS voice for sidebar presence indicators
     await voice.join(chId, chName);
   };
 

@@ -11,7 +11,26 @@ import {
   listPublicAgents, deleteAgent, publicAgent, rotateAgentKey,
 } from '../../agents/registry.js';
 import { collections } from '../../db/types.js';
-import type { AgentDoc, MintReservationDoc } from '../../db/types.js';
+import type { AgentDoc, MintReservationDoc, UserDoc } from '../../db/types.js';
+
+/**
+ * Ownership check that survives legacy + INFT-minted agents.
+ *
+ * Two valid paths:
+ *   1. `createdBy.equals(user._id)` — the user who originally registered the
+ *      agent. Missing on seeded / legacy agents (createdBy is null), which is
+ *      why a direct `.equals()` crashes the route with TypeError.
+ *   2. `ownerWallet === user.walletAddress` — the on-chain INFT owner. Catches
+ *      cases where ownership transferred or the agent was minted before the
+ *      route owner concept existed.
+ */
+function canManageAgent(a: AgentDoc, user: UserDoc): boolean {
+  if (a.createdBy && a.createdBy.equals(user._id)) return true;
+  if (a.ownerWallet && user.walletAddress) {
+    return a.ownerWallet.toLowerCase() === user.walletAddress.toLowerCase();
+  }
+  return false;
+}
 import { encryptAesGcm, packEnvelope, sealEcies, pubkeyFromPrivkey } from '../../crypto/index.js';
 import { createOgStorage } from '../../storage-0g/index.js';
 import { createInftChain } from '../../chain/index.js';
@@ -218,7 +237,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.patch('/v1/agents/:aid', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
 
     const parsed = PatchAgentBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'invalid_body', issues: parsed.error.issues }, 400);
@@ -273,7 +292,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.delete('/v1/agents/:aid', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     await deleteAgent(deps.db, a._id);
     return c.json({ ok: true });
   });
@@ -281,7 +300,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.post('/v1/agents/:aid/rotate-key', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     const key = await rotateAgentKey(deps.db, a._id);
     return c.json({ agentKey: key });
   });
@@ -361,7 +380,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.post('/v1/agents/:aid/skills/install', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     const parsed = InstallSkillBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'validation_failed', issues: parsed.error.issues }, 400);
     try {
@@ -379,7 +398,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.delete('/v1/agents/:aid/skills/:name', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     const name = c.req.param('name');
     try {
       const r = await proxySkills(a.baseUrl, `/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -424,7 +443,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.post('/v1/agents/:aid/mcp/servers', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     const parsed = McpServerBody.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: 'validation_failed', issues: parsed.error.issues }, 400);
     try {
@@ -442,7 +461,7 @@ export function agentRoutes(deps: AgentRouteDeps) {
   app.delete('/v1/agents/:aid/mcp/servers/:id', requireAuth, async (c) => {
     const a = await findAgentByIdOrSlug(deps.db, c.req.param('aid'));
     if (!a) return c.json({ error: 'not_found' }, 404);
-    if (!a.createdBy.equals(c.get('user')._id)) return c.json({ error: 'forbidden' }, 403);
+    if (!canManageAgent(a, c.get('user'))) return c.json({ error: 'forbidden' }, 403);
     const id = c.req.param('id');
     try {
       const r = await proxyMcp(a.baseUrl, `/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' });

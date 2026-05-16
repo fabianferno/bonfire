@@ -172,6 +172,8 @@ interface AppContextValue {
     status: AgentStatus,
   ) => void;
   leaveServer: (serverId: string) => void;
+  /** Delete a channel via the backend (admin-only). Used by the "Close" button on TEE channels. */
+  closeChannel: (serverId: string, channelId: string) => Promise<void>;
   addAuditEntry: (
     serverId: string,
     entry: Omit<AuditEntry, "id" | "timestamp">,
@@ -788,6 +790,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const closeChannel = useCallback(
+    async (serverId: string, channelId: string) => {
+      try {
+        await bf.deleteChannel(channelId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to close channel");
+        throw err;
+      }
+      // Update state only after the backend confirmed deletion. Snap the active
+      // channel to the server's first text channel (typically #general) so the
+      // pane doesn't render the now-gone channel.
+      setServers((prev) =>
+        prev.map((s) => {
+          if (s.id !== serverId) return s;
+          return { ...s, channels: s.channels.filter((c) => c.id !== channelId) };
+        }),
+      );
+      const srv = servers.find((s) => s.id === serverId);
+      const fallback =
+        srv?.channels.find((c) => c.id !== channelId && c.type === "text")?.id ??
+        srv?.channels.find((c) => c.id !== channelId)?.id ??
+        "";
+      setActiveChannelId(fallback);
+    },
+    [servers],
+  );
+
   const addAuditEntry = useCallback(
     (_serverId: string, _entry: Omit<AuditEntry, "id" | "timestamp">) => {
       // No backend support — no-op
@@ -818,6 +847,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addAgent,
         updateAgentStatus,
         leaveServer,
+        closeChannel,
         addAuditEntry,
         activeServer,
         activeChannel,

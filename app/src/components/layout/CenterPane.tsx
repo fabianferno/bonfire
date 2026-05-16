@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock } from "lucide-react";
+import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock, XCircle } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
@@ -14,8 +14,21 @@ import AuditLogPane from "@/components/audit/AuditLogPane";
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 
 export default function CenterPane() {
-  const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage } = useApp();
+  const { servers, activeServer, activeChannel, activeServerId, activeChannelId, sendMessage, closeChannel, user } = useApp();
   const voice = useVoiceCtx();
+
+  const handleCloseTee = async () => {
+    if (!activeChannel || !activeServer) return;
+    const ok = window.confirm(
+      `Close "${activeChannel.name}"?\n\nThis ends the TEE session and permanently deletes the channel and all its messages.`,
+    );
+    if (!ok) return;
+    try {
+      await closeChannel(activeServer.id, activeChannel.id);
+    } catch {
+      // closeChannel surfaces the error via setError; nothing more to do here.
+    }
+  };
 
   if (!activeServer) {
     return servers.length === 0
@@ -85,6 +98,29 @@ export default function CenterPane() {
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
+          {activeChannel.tee && activeServer.ownerId === user.id && (
+            <button
+              onClick={handleCloseTee}
+              title="End TEE session — deletes this channel and all its messages"
+              className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold transition-colors mr-1"
+              style={{
+                background: "rgba(240,91,91,0.08)",
+                color: "var(--bf-red)",
+                border: "1px solid rgba(240,91,91,0.35)",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = "var(--bf-red)";
+                (e.currentTarget as HTMLElement).style.color = "white";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = "rgba(240,91,91,0.08)";
+                (e.currentTarget as HTMLElement).style.color = "var(--bf-red)";
+              }}
+            >
+              <XCircle size={14} strokeWidth={2.2} />
+              Close session
+            </button>
+          )}
           {[
             { Icon: Bell,       title: "Notification Preferences" },
             { Icon: Pin,        title: "Pinned Messages" },

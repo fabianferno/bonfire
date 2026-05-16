@@ -53,6 +53,9 @@ export const bf = {
   ) =>
     api<{ channel: BackendChannel }>('PATCH', `/v1/channels/${cid}`, body),
 
+  deleteChannel: (cid: string) =>
+    api<{ ok: true }>('DELETE', `/v1/channels/${cid}`),
+
   listMessages: (cid: string, opts: { before?: string; limit?: number } = {}) => {
     const params = new URLSearchParams();
     if (opts.before) params.set('before', opts.before);

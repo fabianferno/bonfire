@@ -20,6 +20,8 @@ import type {
 } from "@/lib/types";
 import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 import { BF_DISPLAY_AGENT_MODEL } from "@/lib/brand";
+import { useAgentNotifications } from "@/hooks/useAgentNotifications";
+import AgentToastStack from "@/components/shared/AgentToast";
 
 // ─── Public types (kept stable so existing components compile) ─────────────
 
@@ -692,6 +694,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const { toasts, push: pushNotification, dismiss: dismissToast, requestPermission } = useAgentNotifications();
+
   const sendMessage = useCallback(
     async (serverId: string, channelId: string, content: string) => {
       if (!content.trim() || !authUser) return;
@@ -718,11 +722,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
           }),
         );
+
+        // Fire a notification for each agent reply
+        for (const reply of replies) {
+          const agent = agentMapRef.current.get(reply.authorId);
+          const agentName = agent?.name ?? "Agent";
+          const agentAvatar = agent?.avatar;
+          const replyText = reply.content ?? "";
+          // Detect if the reply contains tool call markers (task execution)
+          const isTask = replyText.includes("[tool:") || (replyText.includes("→") && replyText.includes("←"));
+          // Strip tool call lines for the preview — show only the visible text
+          const visibleText = isTask
+            ? replyText.split("\n").filter(l => !l.startsWith("[tool:") && !l.startsWith("→") && !l.startsWith("←")).join(" ").trim() || replyText
+            : replyText;
+          pushNotification({ agentName, agentAvatar, message: visibleText, isTask });
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to send message");
       }
     },
-    [authUser, mergeMessages],
+    [authUser, mergeMessages, pushNotification],
   );
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -824,6 +843,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  // Request browser notification permission once on mount
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
+
   const activeServer = servers.find((s) => s.id === activeServerId);
   const activeChannel = activeServer?.channels.find(
     (c) => c.id === activeChannelId,
@@ -858,6 +882,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      <AgentToastStack toasts={toasts} onDismiss={dismissToast} />
     </AppContext.Provider>
   );
 }

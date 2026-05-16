@@ -1,7 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+<<<<<<< HEAD
 import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock, XCircle } from "lucide-react";
+=======
+import { Hash, Volume2, Bell, BellOff, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock } from "lucide-react";
+>>>>>>> 03b949e (feat(notifications): implement agent notifications with in-app toasts)
 import { useApp } from "@/context/AppContext";
 import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
@@ -54,6 +58,33 @@ export default function CenterPane() {
     return <KnowledgePanel serverId={activeServerId} />;
   }
 
+  const [showMembers, setShowMembers] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [notifEnabled, setNotifEnabled] = useState(() => {
+    try { return localStorage.getItem("bonfire_notifications_enabled") !== "false"; } catch { return true; }
+  });
+
+  const toggleNotif = () => {
+    const next = !notifEnabled;
+    setNotifEnabled(next);
+    try { localStorage.setItem("bonfire_notifications_enabled", next ? "true" : "false"); } catch { /* ignore */ }
+    if (next && typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  };
+
+  const openSearch = () => {
+    setShowSearch(s => !s);
+    setTimeout(() => searchRef.current?.focus(), 50);
+  };
+
+  const messages = activeChannel.messages;
+  const filteredMessages = searchQuery.trim()
+    ? messages.filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
+
   return (
     <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "var(--bf-primary)" }}>
 
@@ -98,6 +129,7 @@ export default function CenterPane() {
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
+<<<<<<< HEAD
           {activeChannel.tee && activeServer.ownerId === user.id && (
             <button
               onClick={handleCloseTee}
@@ -139,6 +171,31 @@ export default function CenterPane() {
               <Icon size={20} strokeWidth={1.5} />
             </button>
           ))}
+=======
+          {/* Notifications toggle */}
+          <HeaderBtn
+            title={notifEnabled ? "Mute notifications" : "Enable notifications"}
+            active={notifEnabled}
+            onClick={toggleNotif}
+          >
+            {notifEnabled ? <Bell size={20} strokeWidth={1.5} /> : <BellOff size={20} strokeWidth={1.5} />}
+          </HeaderBtn>
+
+          {/* Members sidebar */}
+          <HeaderBtn title="Member List" active={showMembers} onClick={() => setShowMembers(v => !v)}>
+            <Users size={20} strokeWidth={1.5} />
+          </HeaderBtn>
+
+          {/* Search */}
+          <HeaderBtn title="Search messages" active={showSearch} onClick={openSearch}>
+            <Search size={20} strokeWidth={1.5} />
+          </HeaderBtn>
+
+          {/* Help — links to docs */}
+          <HeaderBtn title="Help" onClick={() => window.open("https://github.com/anthropics/claude-code/issues", "_blank")}>
+            <HelpCircle size={20} strokeWidth={1.5} />
+          </HeaderBtn>
+>>>>>>> 03b949e (feat(notifications): implement agent notifications with in-app toasts)
         </div>
       </header>
 
@@ -149,16 +206,111 @@ export default function CenterPane() {
           agents={activeServer.agents}
         />
       ) : (
-        <>
-          <MessageFeed messages={activeChannel.messages} />
-          <MessageComposer
-            channel={activeChannel}
-            onSend={text => sendMessage(activeServerId, activeChannelId, text)}
-            agents={activeServer.agents}
-          />
-        </>
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Main chat column */}
+          <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+            {/* Search bar */}
+            {showSearch && (
+              <div
+                className="flex items-center gap-2 px-4 py-2 flex-shrink-0"
+                style={{ borderBottom: "1px solid var(--bf-quinary)", background: "var(--bf-secondary)" }}
+              >
+                <Search size={14} style={{ color: "var(--bf-gray)", flexShrink: 0 }} />
+                <input
+                  ref={searchRef}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search messages…"
+                  className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-500"
+                />
+                {searchQuery && (
+                  <span className="text-xs flex-shrink-0" style={{ color: "var(--bf-gray)" }}>
+                    {filteredMessages.length} result{filteredMessages.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+                <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} style={{ color: "var(--bf-gray)" }}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            <MessageFeed messages={searchQuery.trim() ? filteredMessages : activeChannel.messages} />
+            <MessageComposer
+              channel={activeChannel}
+              onSend={text => sendMessage(activeServerId, activeChannelId, text)}
+              agents={activeServer.agents}
+            />
+          </div>
+
+          {/* Members sidebar */}
+          {showMembers && (
+            <div
+              className="flex-shrink-0 overflow-y-auto flex flex-col gap-1 py-3 px-2"
+              style={{ width: 220, borderLeft: "1px solid var(--bf-quinary)", background: "var(--bf-primary)" }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wider px-2 mb-1" style={{ color: "var(--bf-gray)" }}>
+                Members — {activeServer.agents.length + activeServer.members.length}
+              </p>
+              {activeServer.agents.length > 0 && (
+                <>
+                  <p className="text-xs uppercase tracking-wider px-2 mt-1 mb-0.5" style={{ color: "var(--bf-gray)", fontSize: 10 }}>Agents</p>
+                  {activeServer.agents.map(a => (
+                    <div key={a.id} className="flex items-center gap-2 px-2 py-1 rounded-lg" style={{ color: "white" }}>
+                      <Avatar name={a.name} size={28} src={a.avatar} color="var(--bf-fire)" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{a.name}</p>
+                      </div>
+                      <span className="ml-auto w-2 h-2 rounded-full flex-shrink-0" style={{ background: "#4ade80" }} />
+                    </div>
+                  ))}
+                </>
+              )}
+              {activeServer.members.length > 0 && (
+                <>
+                  <p className="text-xs uppercase tracking-wider px-2 mt-2 mb-0.5" style={{ color: "var(--bf-gray)", fontSize: 10 }}>Users</p>
+                  {activeServer.members.map(m => (
+                    <div key={m.id} className="flex items-center gap-2 px-2 py-1 rounded-lg" style={{ color: "var(--bf-gray)" }}>
+                      <Avatar name={m.username} size={28} color="var(--bf-plum)" />
+                      <p className="text-sm truncate">{m.username}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </main>
+  );
+}
+
+// ── Header button ─────────────────────────────────────────────────────────────
+
+function HeaderBtn({
+  title,
+  active,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors"
+      style={{
+        color: active ? "white" : "var(--bf-gray)",
+        background: active ? "var(--bf-quinary)" : "transparent",
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "white"; if (!active) (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = active ? "white" : "var(--bf-gray)"; if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+    >
+      {children}
+    </button>
   );
 }
 

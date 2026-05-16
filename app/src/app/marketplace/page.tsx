@@ -3,13 +3,18 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Search, Plus, ImagePlus, Share2, MoreHorizontal, X,
-  Flame, Sparkles, Bot, MessageSquare,
+  Flame, Sparkles, Bot, MessageSquare, Pencil,
 } from 'lucide-react';
 import { bf } from '@/lib/api-bonfire';
 import { agentAvatarDisplayUrl } from '@/lib/agent-identicon';
 import FlameAvatar from '@/components/shared/FlameAvatar';
 import { useAuth } from '@/components/auth/AuthProvider';
 import type { BackendAgent } from '@/lib/types';
+
+function truncateAddr(addr: string) {
+  if (!addr || addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
 import InviteAgentToServerModal from '@/components/marketplace/InviteAgentToServerModal';
 import CreateAgentModal from '@/components/marketplace/CreateAgentModal';
 import LeftNav from '@/components/layout/LeftNav';
@@ -66,6 +71,116 @@ function PriceLabel({ agent }: { agent: BackendAgent }) {
   );
 }
 
+// ── Edit agent modal ──────────────────────────────────────────────────────────
+
+function EditAgentModal({ agent, onClose, onSaved }: {
+  agent: BackendAgent;
+  onClose: () => void;
+  onSaved: (updated: BackendAgent) => void;
+}) {
+  const [name, setName] = useState(agent.name);
+  const [description, setDescription] = useState(agent.description);
+  const [priceOg, setPriceOg] = useState(agent.priceOg ?? '0');
+  const [avatarUrl, setAvatarUrl] = useState(agent.avatarUrl ?? '');
+  const [tags, setTags] = useState((agent.tags ?? []).join(', '));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await bf.patchAgent(agent.id, {
+        name: name.trim(),
+        description: description.trim(),
+        priceOg: priceOg.trim() || '0',
+        avatarUrl: avatarUrl.trim() || null,
+        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      });
+      onSaved(res.agent);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (label: string, el: React.ReactNode) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--bf-gray)' }}>{label}</label>
+      {el}
+    </div>
+  );
+
+  const inputCls = "w-full rounded-lg px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[var(--bf-accent)]";
+  const inputStyle = { background: 'var(--bf-quaternary)', border: '1px solid var(--bf-quinary)' };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+        style={{ background: 'var(--bf-secondary)', border: '1px solid var(--bf-quinary)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--bf-quaternary)' }}>
+          <h3 className="text-white font-bold text-base">Edit Agent</h3>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--bf-quinary)]" style={{ color: 'var(--bf-gray)' }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Fields */}
+        <div className="flex flex-col gap-4 px-5 py-4 overflow-y-auto" style={{ maxHeight: '60vh' }}>
+          {field('Name', (
+            <input className={inputCls} style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Agent name" />
+          ))}
+          {field('Description', (
+            <textarea
+              className={inputCls} style={{ ...inputStyle, resize: 'vertical', minHeight: 72 }}
+              value={description} onChange={e => setDescription(e.target.value)} placeholder="Short description"
+            />
+          ))}
+          {field('Invite Price (OG)', (
+            <input className={inputCls} style={inputStyle} value={priceOg} onChange={e => setPriceOg(e.target.value)} placeholder="0" type="number" min="0" step="0.01" />
+          ))}
+          {field('Avatar URL', (
+            <input className={inputCls} style={inputStyle} value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} placeholder="https://…" />
+          ))}
+          {field('Tags (comma-separated)', (
+            <input className={inputCls} style={inputStyle} value={tags} onChange={e => setTags(e.target.value)} placeholder="Research, Code, Finance" />
+          ))}
+          {error && <p className="text-xs rounded-lg px-3 py-2" style={{ background: 'rgba(240,91,91,0.12)', color: 'var(--bf-red)' }}>{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--bf-quaternary)' }}>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+            style={{ background: 'var(--bf-quaternary)', color: 'var(--bf-gray)' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2 rounded-lg text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{ background: 'var(--bf-accent)' }}
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Detail overlay ────────────────────────────────────────────────────────────
 
 interface AgentEarnings {
@@ -80,18 +195,31 @@ interface AgentEarnings {
 }
 
 function AgentDetailOverlay({
-  agent,
+  agent: initialAgent,
   onClose,
   onInvite,
   onMessage,
+  onAgentUpdated,
 }: {
   agent: BackendAgent;
   onClose: () => void;
   onInvite: (a: BackendAgent) => void;
   onMessage: (a: BackendAgent) => void;
+  onAgentUpdated?: (updated: BackendAgent) => void;
 }) {
+  const [agent, setAgent] = useState(initialAgent);
+  const [showEdit, setShowEdit] = useState(false);
+  const { walletAddress } = useAuth();
+  const isCreator = !!walletAddress && !!agent.ownerWallet &&
+    agent.ownerWallet.toLowerCase() === walletAddress.toLowerCase();
+
   const agentPrice = parseFloat(agent.priceOg ?? '0');
   const priced = Number.isFinite(agentPrice) && agentPrice > 0;
+
+  const handleSaved = (updated: BackendAgent) => {
+    setAgent(updated);
+    onAgentUpdated?.(updated);
+  };
 
   // Lifetime invite earnings for the agent (public; no auth needed).
   const [earnings, setEarnings] = useState<AgentEarnings | null>(null);
@@ -158,6 +286,18 @@ function AgentDetailOverlay({
           <button className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bf-quinary)]" style={{ color: 'var(--bf-gray)' }}>
             <MoreHorizontal size={15} />
           </button>
+          {isCreator && (
+            <button
+              onClick={() => setShowEdit(true)}
+              className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors"
+              style={{ background: 'var(--bf-quaternary)', color: 'var(--bf-gray)', border: '1px solid var(--bf-quinary)' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'white'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--bf-gray)'; }}
+            >
+              <Pencil size={13} />
+              Edit
+            </button>
+          )}
           <button
             onClick={() => { onMessage(agent); onClose(); }}
             className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-1.5"
@@ -223,6 +363,9 @@ function AgentDetailOverlay({
                   value={priced ? `${agent.priceOg} OG` : 'Free'}
                   color={priced ? '#fbbf24' : '#43b581'}
                 />
+                {agent.ownerWallet && (
+                  <DetailRow label="Creator" value={truncateAddr(agent.ownerWallet)} mono />
+                )}
               </div>
             </div>
 
@@ -276,15 +419,23 @@ function AgentDetailOverlay({
           </div>
         </div>
       </div>
+
+      {showEdit && (
+        <EditAgentModal
+          agent={agent}
+          onClose={() => setShowEdit(false)}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   );
 }
 
-function DetailRow({ label, value, color }: { label: string; value: string; color?: string }) {
+function DetailRow({ label, value, color, mono }: { label: string; value: string; color?: string; mono?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-2">
       <span className="text-xs flex-shrink-0" style={{ color: 'var(--bf-gray)' }}>{label}</span>
-      <span className="text-xs font-medium text-right" style={{ color: color ?? 'white' }}>{value}</span>
+      <span className={`text-xs font-medium text-right${mono ? ' font-mono' : ''}`} style={{ color: color ?? 'white' }}>{value}</span>
     </div>
   );
 }
@@ -539,6 +690,11 @@ function MarketplaceInner() {
                                   <PriceLabel agent={agent} />
                                 </div>
                                 <p className="text-xs leading-relaxed" style={{ color: 'var(--bf-gray)' }}>{agent.description}</p>
+                                {agent.ownerWallet && (
+                                  <p className="text-xs font-mono" style={{ color: 'var(--bf-symbol)' }}>
+                                    by {truncateAddr(agent.ownerWallet)}
+                                  </p>
+                                )}
                                 <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: 'var(--bf-quaternary)' }}>
                                   <p className="text-xs" style={{ color: 'var(--bf-symbol)' }}>@{agent.slug}</p>
                                   <div className="flex items-center gap-1.5">
@@ -581,6 +737,10 @@ function MarketplaceInner() {
           onClose={() => setDetailAgent(null)}
           onInvite={openInvite}
           onMessage={startDm}
+          onAgentUpdated={updated => {
+            setDetailAgent(updated);
+            setAgents(prev => prev.map(a => a.id === updated.id ? updated : a));
+          }}
         />
       )}
 

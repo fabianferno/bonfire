@@ -510,6 +510,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .filter((c) => c.type === "audit")
           .map(mapChannel);
 
+        // Knowledge-base channel(s) — visible to every member.
+        const knowledgeChannels: Channel[] = rawCh
+          .filter((c) => c.type === "knowledge")
+          .map(mapChannel);
+
         // Separate agent vs user members
         const agentMembers = rawMembers.filter((m) => m.principalType === "agent");
         const userMembers = rawMembers.filter((m) => m.principalType === "user");
@@ -536,7 +541,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setServers((prev) =>
           prev.map((s) => {
             if (s.id !== activeServerId) return s;
-            return { ...s, channels: [...textChannels, ...voiceChannels, ...auditChannels], agents, members };
+            return { ...s, channels: [...textChannels, ...voiceChannels, ...knowledgeChannels, ...auditChannels], agents, members };
           }),
         );
 

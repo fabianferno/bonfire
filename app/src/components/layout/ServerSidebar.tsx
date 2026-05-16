@@ -194,32 +194,74 @@ export default function ServerSidebar() {
           )}
         </div>
 
-        {/* Voice Connected bar — like Discord's bottom-left green bar */}
+        {/* Voice Connected bar — Discord style */}
         {voice.joinedChannelId && (
-          <div className="flex-shrink-0 px-2 pt-1.5 pb-1" style={{ background: "var(--bf-quaternary)", borderTop: "1px solid var(--bf-quinary)" }}>
-            {/* Status row */}
-            <div className="flex items-center justify-between px-1 mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <Signal size={13} strokeWidth={2.5} style={{ color: "var(--bf-accent)" }} />
-                <span className="text-xs font-semibold" style={{ color: "var(--bf-accent)" }}>Voice Connected</span>
+          <div className="flex-shrink-0 mx-2 mb-2 rounded-xl overflow-hidden" style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}>
+            {/* Top: status + disconnect */}
+            <div className="flex items-start justify-between px-3 pt-3 pb-1">
+              <div>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <Signal size={13} strokeWidth={2.5} style={{ color: "var(--bf-green)" }} />
+                  <span className="text-sm font-bold" style={{ color: "var(--bf-green)" }}>Voice Connected</span>
+                </div>
+                <p className="text-xs truncate" style={{ color: "var(--bf-gray)" }}>
+                  {voice.joinedChannelName} / {activeServer.name}
+                </p>
               </div>
               <button onClick={voice.leave} title="Disconnect"
-                className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--bf-quinary)] transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--bf-quinary)] flex-shrink-0 ml-2"
                 style={{ color: "var(--bf-red)" }}>
-                <PhoneOff size={13} strokeWidth={2} />
+                <PhoneOff size={15} strokeWidth={2} />
               </button>
             </div>
-            <p className="text-xs px-1 mb-2 truncate" style={{ color: "var(--bf-gray)" }}>
-              {voice.joinedChannelName} / {activeServer.name}
-            </p>
-            {/* Mic / Deafen row */}
-            <div className="flex items-center gap-0.5 px-0.5">
-              <VoiceIconBtn title={voice.muted ? "Unmute" : "Mute"} active={!voice.muted} onClick={voice.toggleMute}>
-                {voice.muted ? <MicOff size={16} /> : <Mic size={16} />}
-              </VoiceIconBtn>
-              <VoiceIconBtn title={voice.deafened ? "Undeafen" : "Deafen"} active={!voice.deafened} onClick={voice.toggleDeafen}>
-                <Headphones size={16} />
-              </VoiceIconBtn>
+
+            {/* Middle: 4 action buttons */}
+            <div className="grid grid-cols-4 gap-1 px-2 py-2">
+              {[
+                { Icon: voice.muted ? MicOff : Mic,         label: voice.muted ? "Unmute" : "Mute",             onClick: voice.toggleMute,    active: !voice.muted },
+                { Icon: voice.deafened ? Headphones : Headphones, label: voice.deafened ? "Undeafen" : "Deafen", onClick: voice.toggleDeafen,  active: !voice.deafened },
+                { Icon: Signal,    label: "Sound",    onClick: undefined, active: false },
+                { Icon: PhoneOff,  label: "Hang up",  onClick: voice.leave, active: false, danger: true },
+              ].map(({ Icon, label, onClick, active, danger }) => (
+                <button
+                  key={label}
+                  title={label}
+                  onClick={onClick}
+                  className="flex flex-col items-center justify-center gap-1 py-2 rounded-lg transition-colors"
+                  style={{
+                    background: "var(--bf-quinary)",
+                    color: danger ? "var(--bf-red)" : active ? "white" : "var(--bf-gray)",
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.12)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
+                >
+                  <Icon size={16} strokeWidth={1.8} />
+                </button>
+              ))}
+            </div>
+
+            {/* Bottom: user row */}
+            <div className="flex items-center gap-2 px-3 pb-3">
+              <div className="relative flex-shrink-0">
+                <Avatar name={user.username} size={32} src={user.avatar} />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+                  style={{ background: "var(--bf-green)", borderColor: "var(--bf-quaternary)" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-white leading-none truncate">{user.username}</p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--bf-gray)" }}>In voice</p>
+              </div>
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <VoiceIconBtn title={voice.muted ? "Unmute" : "Mute"} active={!voice.muted} onClick={voice.toggleMute}>
+                  {voice.muted ? <MicOff size={15} /> : <Mic size={15} />}
+                </VoiceIconBtn>
+                <VoiceIconBtn title={voice.deafened ? "Undeafen" : "Deafen"} active={!voice.deafened} onClick={voice.toggleDeafen}>
+                  <Headphones size={15} />
+                </VoiceIconBtn>
+                <VoiceIconBtn title="Settings" active={true} onClick={() => {}}>
+                  <Settings size={15} />
+                </VoiceIconBtn>
+              </div>
             </div>
           </div>
         )}

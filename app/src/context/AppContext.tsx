@@ -554,11 +554,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }),
         );
 
-        // Set first text channel as active
-        const firstCh = textChannels[0];
-        if (firstCh) {
-          setActiveChannelId(firstCh.id);
-        }
+        // No channel selected by default — user picks one explicitly.
       } catch {
         // Non-fatal — server data load errors are soft
       }

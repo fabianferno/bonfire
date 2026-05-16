@@ -11,7 +11,13 @@ function Loading() {
       style={{ background: "var(--bf-primary)" }}
     >
       <div className="text-center" style={{ color: "var(--bf-gray)" }}>
-        <div className="text-3xl mb-3">🔥</div>
+        <iframe
+          src="/flame.html"
+          title="Loading"
+          aria-label="Loading"
+          className="mx-auto mb-3"
+          style={{ width: 240, height: 240, border: 0, background: "transparent", display: "block" }}
+        />
         <p className="text-white font-semibold">Loading…</p>
       </div>
     </div>

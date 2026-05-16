@@ -22,7 +22,13 @@ export default function MessageFeed({ messages }: { messages: Message[] }) {
       {messages.length === 0 && (
         <div className="flex-1 flex items-center justify-center text-center px-8" style={{ color: "var(--bf-gray)" }}>
           <div>
-            <p className="text-3xl mb-3">🔥</p>
+            <iframe
+              src="/flame.html"
+              title="flame"
+              aria-label="BonFire"
+              className="mb-3"
+              style={{ width: 280, height: 280, border: 0, background: "transparent", display: "block", marginLeft: "auto", marginRight: "auto" }}
+            />
             <p className="text-xl font-bold text-white mb-2">
               Hey,{" "}
               <span

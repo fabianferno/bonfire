@@ -118,7 +118,10 @@ export default function ServerSidebar() {
         <div className="mt-2"><WalletPanel serverId={activeServer.id} /></div>
 
         {/* Channel list */}
-        <div className="flex-1 overflow-y-auto px-2">
+        <div
+          className="flex-1 overflow-y-auto px-2"
+          onClick={e => { if (!(e.target as Element).closest("button")) setActiveChannel(""); }}
+        >
 
           {/* Text channels */}
           <ChannelCategory label="Text Channels" onAdd={() => { setNewChType("text"); setShowChannelModal(true); }} />

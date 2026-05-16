@@ -117,6 +117,9 @@ importers:
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
+      ws:
+        specifier: ^8.20.1
+        version: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       zod:
         specifier: ^3.23.0
         version: 3.25.76
@@ -127,6 +130,9 @@ importers:
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       mongodb-memory-server:
         specifier: ^10.1.2
         version: 10.4.3

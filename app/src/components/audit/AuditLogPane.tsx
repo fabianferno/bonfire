@@ -1,40 +1,62 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { type CSSProperties, useState, useEffect, useCallback } from "react";
 import { ShieldAlert, RefreshCw } from "lucide-react";
 import { bf, type AuditLogEntry } from "@/lib/api-bonfire";
 import { useApp } from "@/context/AppContext";
 
-const ACTION_CHIP: Record<string, string> = {
-  agent_invoked:  "var(--bf-accent)",
-  agent_replied:  "#4ade80",
-  agent_failed:   "var(--bf-red)",
+/** Uppercase action token color — plum / banana / red + brand-tinted variants */
+const ACTION_COLOR: Record<string, string> = {
+  agent_invoked: "var(--bf-accent)",
+  agent_replied: "var(--bf-yellow)",
+  agent_failed: "var(--bf-red)",
+  voice_join: "color-mix(in srgb, var(--bf-accent) 82%, white)",
+  voice_leave: "color-mix(in srgb, var(--bf-yellow) 65%, var(--bf-gray))",
 };
+
+function actorTag(actor: AuditLogEntry["actorType"]): string {
+  switch (actor) {
+    case "agent":
+      return "AGT";
+    case "user":
+      return "USR";
+    case "system":
+    default:
+      return "SYS";
+  }
+}
 
 function actionLabel(entry: AuditLogEntry): string {
   const p = entry.payload;
   switch (entry.action) {
     case "agent_invoked":
-      return `invoked: "${String(p.inputPreview ?? "").slice(0, 80)}"`;
+      return `invoke "${String(p.inputPreview ?? "").slice(0, 80)}"`;
     case "agent_replied":
-      return `replied: "${String(p.replyPreview ?? "").slice(0, 80)}" (${p.durationMs ?? "?"}ms)`;
+      return `reply "${String(p.replyPreview ?? "").slice(0, 80)}" (${p.durationMs ?? "?"}ms)`;
     case "agent_failed":
-      return `failed: ${String(p.error ?? "unknown error").slice(0, 100)}`;
+      return `fail ${String(p.error ?? "unknown error").slice(0, 100)}`;
     default:
-      return JSON.stringify(p).slice(0, 120);
+      return JSON.stringify(p);
   }
 }
 
-function RelativeTime({ iso }: { iso: string }) {
-  const abs = new Date(iso).toLocaleString();
-  const diff = Date.now() - new Date(iso).getTime();
-  let rel: string;
-  if (diff < 60_000) rel = "just now";
-  else if (diff < 3_600_000) rel = `${Math.floor(diff / 60_000)}m ago`;
-  else if (diff < 86_400_000) rel = `${Math.floor(diff / 3_600_000)}h ago`;
-  else rel = `${Math.floor(diff / 86_400_000)}d ago`;
+function TerminalTimestamp({ iso }: { iso: string }) {
+  const d = new Date(iso);
+  const wall = d.toLocaleString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    month: "short",
+    day: "numeric",
+  });
+  const title = d.toISOString();
   return (
-    <span title={abs} style={{ color: "var(--bf-gray)", fontSize: 11, cursor: "help" }}>
-      {rel}
+    <span
+      title={title}
+      className="inline-block shrink-0 cursor-help whitespace-nowrap tabular-nums"
+      style={{ color: "var(--bf-symbol)" }}
+    >
+      [{wall}]
     </span>
   );
 }
@@ -57,27 +79,46 @@ export default function AuditLogPane({ channelId }: { channelId: string }) {
     }
   }, [channelId]);
 
-  // Initial load + 5-second poll
   useEffect(() => {
-    fetchEntries();
+    /* polling + initial load — state updates run after I/O resolves */
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- audit stream refresh
+    void fetchEntries();
     const id = setInterval(fetchEntries, 5000);
     return () => clearInterval(id);
   }, [fetchEntries]);
 
+  const terminalShell: CSSProperties = {
+    borderColor: "color-mix(in srgb, var(--bf-accent) 28%, var(--bf-quinary))",
+    background: "var(--bf-quaternary)",
+    boxShadow: "inset 0 1px 0 rgba(254,255,252,0.04)",
+  };
+
+  const terminalTitleBar: CSSProperties = {
+    borderBottomColor: "var(--bf-border)",
+    background: "var(--bf-secondary)",
+  };
+
+  const scrollChrome: CSSProperties = {
+    background: "var(--bf-primary)",
+  };
+
   return (
-    <main className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "var(--bf-primary)" }}>
-      {/* Header */}
+    <main className="flex flex-1 min-w-0 flex-col overflow-hidden" style={{ background: "var(--bf-primary)" }}>
       <header
-        className="flex items-center gap-3 px-4 h-14 border-b flex-shrink-0"
+        className="flex h-14 flex-shrink-0 items-center gap-3 border-b px-4"
         style={{ borderColor: "var(--bf-quinary)" }}
       >
         <ShieldAlert size={20} style={{ color: "var(--bf-fire)", flexShrink: 0 }} strokeWidth={1.5} />
-        <span className="font-bold text-white text-lg">
+        <span className="min-w-0 truncate text-lg font-bold text-white">
           Audit Log{activeServer ? ` · ${activeServer.name}` : ""}
         </span>
         <span
-          className="ml-1 px-2 py-0.5 rounded text-xs font-bold uppercase"
-          style={{ background: "rgba(240,91,91,0.15)", color: "var(--bf-red)", border: "1px solid rgba(240,91,91,0.3)" }}
+          className="ml-1 rounded px-2 py-0.5 text-xs font-bold uppercase"
+          style={{
+            background: "rgba(240,91,91,0.15)",
+            color: "var(--bf-red)",
+            border: "1px solid rgba(240,91,91,0.3)",
+          }}
         >
           Owner-only
         </span>
@@ -85,79 +126,134 @@ export default function AuditLogPane({ channelId }: { channelId: string }) {
         <button
           onClick={fetchEntries}
           title="Refresh"
-          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+          className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
           style={{ color: "var(--bf-gray)" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "white"; (e.currentTarget as HTMLElement).style.background = "var(--bf-quinary)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--bf-gray)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.color = "white";
+            el.style.background = "var(--bf-quinary)";
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.color = "var(--bf-gray)";
+            el.style.background = "transparent";
+          }}
         >
           <RefreshCw size={16} strokeWidth={1.5} />
         </button>
       </header>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {loading && (
-          <p className="text-sm text-center py-12" style={{ color: "var(--bf-gray)" }}>
-            Loading audit events…
-          </p>
-        )}
-
-        {!loading && error && (
-          <p className="text-sm text-center py-12" style={{ color: "var(--bf-red)" }}>
-            {error}
-          </p>
-        )}
-
-        {!loading && !error && entries.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <ShieldAlert size={32} strokeWidth={1} style={{ color: "var(--bf-symbol)" }} />
-            <p className="text-sm" style={{ color: "var(--bf-gray)" }}>No audit events yet.</p>
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border" style={terminalShell}>
+          <div className="flex flex-shrink-0 items-center gap-2 border-b px-3 py-2" style={terminalTitleBar}>
+            <span
+              className="font-mono text-[11px]"
+              style={{ color: "color-mix(in srgb, var(--bf-accent) 72%, var(--bf-gray))" }}
+            >
+              bonfire — audit stream
+            </span>
+            <span className="flex-1" />
+            <span className="font-mono text-[10px]" style={{ color: "var(--bf-symbol)" }} title={channelId}>
+              cid:{channelId.slice(0, 8)}…
+            </span>
           </div>
-        )}
 
-        {!loading && !error && entries.length > 0 && (
-          <div className="flex flex-col gap-2 max-w-3xl">
-            {entries.map((entry) => (
-              <AuditRow key={entry.id} entry={entry} />
-            ))}
+          <div
+            className="bf-audit-terminal-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-[12px] leading-relaxed tracking-tight"
+            style={scrollChrome}
+          >
+            {loading && (
+              <p className="py-8 text-center" style={{ color: "var(--bf-gray)" }}>
+                <span style={{ color: "var(--bf-accent)" }}>…</span> streaming events
+              </p>
+            )}
+
+            {!loading && error && (
+              <p className="break-words py-8 text-center" style={{ color: "var(--bf-red)" }}>
+                <span style={{ color: "var(--bf-red)", fontWeight: 700 }}>ERR </span>
+                {error}
+              </p>
+            )}
+
+            {!loading && !error && entries.length === 0 && (
+              <div className="flex flex-col items-center justify-center gap-2 py-16" style={{ color: "var(--bf-gray)" }}>
+                <span style={{ color: "var(--bf-symbol)" }}>—</span>
+                <p className="text-[11px]">empty buffer · no audit lines yet</p>
+              </div>
+            )}
+
+            {!loading && !error && entries.length > 0 && (
+              <div className="flex flex-col">
+                <div
+                  aria-hidden
+                  className="mb-2 select-none border-b border-dashed pb-2 text-[10px]"
+                  style={{
+                    borderColor: "var(--bf-quinary)",
+                    color: "var(--bf-symbol)",
+                  }}
+                >
+                  <span style={{ color: "var(--bf-accent)" }}>^ </span>
+                  last {entries.length} lines (poll 5s) · monospace
+                </div>
+                {entries.map((entry, i) => (
+                  <AuditLine key={entry.id} entry={entry} alt={i % 2 === 1} />
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
+
+      <style jsx global>{`
+        .bf-audit-terminal-scroll ::selection {
+          background: color-mix(in srgb, var(--bf-accent) 35%, transparent);
+        }
+      `}</style>
     </main>
   );
 }
 
-function AuditRow({ entry }: { entry: AuditLogEntry }) {
-  const chipColor = ACTION_CHIP[entry.action] ?? "var(--bf-gray)";
+function AuditLine({ entry, alt }: { entry: AuditLogEntry; alt: boolean }) {
+  const actionColor = ACTION_COLOR[entry.action] ?? "var(--bf-gray)";
+  const actionTok = entry.action.replaceAll("_", " ").toUpperCase();
+  const detail = actionLabel(entry);
+
+  const rowStyle: CSSProperties = {
+    borderLeftWidth: 2,
+    borderLeftStyle: "solid",
+    borderLeftColor: alt ? "var(--bf-quinary)" : "color-mix(in srgb, var(--bf-accent) 22%, var(--bf-quinary))",
+    background: alt ? "color-mix(in srgb, var(--bf-accent) 9%, var(--bf-primary))" : "transparent",
+  };
+
+  const badgeStyle: CSSProperties = {
+    background: "var(--bf-quaternary)",
+    color: "var(--bf-symbol)",
+    border: "1px solid var(--bf-quinary)",
+  };
+
   return (
     <div
-      className="flex items-start gap-3 px-4 py-3 rounded-xl"
-      style={{ background: "var(--bf-secondary)", border: "1px solid var(--bf-quinary)" }}
+      className="group grid gap-x-3 py-1.5 pl-2 pr-1 sm:grid-cols-[minmax(11rem,auto)_8.5rem_1fr] sm:items-baseline"
+      style={rowStyle}
     >
-      {/* Timestamp */}
-      <div className="flex-shrink-0 pt-0.5 min-w-16 text-right">
-        <RelativeTime iso={entry.createdAt} />
-      </div>
-
-      {/* Action chip */}
-      <span
-        className="flex-shrink-0 mt-0.5 px-2 py-0.5 rounded text-xs font-bold uppercase"
-        style={{ background: `${chipColor}22`, color: chipColor, border: `1px solid ${chipColor}44` }}
-      >
-        {entry.action.replace("_", " ")}
-      </span>
-
-      {/* Agent slug */}
-      {entry.agentSlug && (
-        <span className="flex-shrink-0 mt-0.5 text-xs font-mono" style={{ color: "var(--bf-accent)" }}>
-          @{entry.agentSlug}
+      <TerminalTimestamp iso={entry.createdAt} />
+      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 sm:mt-0">
+        <span className="font-semibold uppercase tracking-wide" style={{ color: actionColor }}>
+          {actionTok}
         </span>
-      )}
-
-      {/* Description */}
-      <span className="text-xs leading-relaxed truncate" style={{ color: "var(--bf-gray)" }}>
-        {actionLabel(entry)}
-      </span>
+        <span className="rounded px-1 py-px text-[10px] font-medium uppercase tracking-wider" style={badgeStyle}>
+          {actorTag(entry.actorType)}
+        </span>
+      </div>
+      <div className="min-w-0 break-all sm:col-span-1">
+        {entry.agentSlug && (
+          <>
+            <span style={{ color: "var(--bf-accent)" }}>@{entry.agentSlug}</span>
+            <span style={{ color: "var(--bf-symbol)" }}> · </span>
+          </>
+        )}
+        <span style={{ color: "var(--bf-gray)" }}>{detail}</span>
+      </div>
     </div>
   );
 }

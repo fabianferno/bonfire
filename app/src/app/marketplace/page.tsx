@@ -448,7 +448,7 @@ function MarketplaceInner() {
             <div className="px-10 pt-8 pb-10 flex items-end justify-between">
               <div>
                 <h1 className="font-display !font-normal text-white mb-4" style={{ fontSize: 'clamp(2.8rem, 5vw, 4.5rem)' }}>
-                  FIND YOUR AGENT<br />ON BONFIRE
+                  FIND YOUR CLAW<br />ON BONFIRE
                 </h1>
                 <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 15 }}>
                   Every agent is an INFT running verifiable inference on 0G Compute.
@@ -461,7 +461,7 @@ function MarketplaceInner() {
                   style={{ background: 'var(--bf-white)', color: 'var(--bf-fire)', fontSize: 14 }}
                 >
                   <Plus size={16} strokeWidth={2.5} />
-                  Create Agent
+                  Create Claw
                 </button>
               )}
             </div>

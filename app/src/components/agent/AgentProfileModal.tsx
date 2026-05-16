@@ -13,9 +13,9 @@ import { MCP_PRESETS, type McpPreset } from "./mcp-presets";
 
 const STATUS_COLOR: Record<string, string> = {
   online:  "var(--bf-accent)",
-  busy:    "#f05b5b",
-  idle:    "#fbbf24",
-  offline: "#4b5563",
+  busy:    "var(--bf-yellow)",
+  idle:    "var(--bf-symbol)",
+  offline: "var(--bf-symbol)",
 };
 
 interface Props {
@@ -236,7 +236,16 @@ function McpManager({ agentId }: { agentId: string }) {
   return (
     <div className="flex flex-col gap-3">
       {error && (
-        <p className="text-rose-300 bg-rose-900/40 rounded p-2 text-sm">{error}</p>
+        <p
+          className="rounded p-2 text-sm border"
+          style={{
+            color: "var(--bf-yellow)",
+            background: "color-mix(in srgb, var(--bf-accent) 18%, transparent)",
+            borderColor: "var(--bf-quinary)",
+          }}
+        >
+          {error}
+        </p>
       )}
 
       {entries.length === 0 && !showForm && (
@@ -277,12 +286,12 @@ function McpManager({ agentId }: { agentId: string }) {
             <button
               onClick={() => handleRemove(id)}
               disabled={removing === id}
-              className="rounded p-1 transition-colors hover:bg-rose-900/30 disabled:opacity-40"
+              className="rounded p-1 transition-colors disabled:opacity-40 hover:bg-[color-mix(in_srgb,var(--bf-accent)_18%,transparent)]"
               title="Remove server"
             >
               {removing === id
                 ? <Loader2 size={13} className="animate-spin" style={{ color: "var(--bf-gray)" }} />
-                : <Trash2 size={13} style={{ color: "#f05b5b" }} />
+                : <Trash2 size={13} style={{ color: "var(--bf-symbol)" }} />
               }
             </button>
           </div>
@@ -305,7 +314,7 @@ function McpManager({ agentId }: { agentId: string }) {
                 placeholder="my-mcp-server"
                 autoComplete="off"
               />
-              {formErrors.id && <p className="text-rose-300 text-xs mt-1">{formErrors.id}</p>}
+              {formErrors.id && <p className="text-xs mt-1" style={{ color: "var(--bf-yellow)" }}>{formErrors.id}</p>}
             </div>
             <div>
               <ModalLabel>Command <span style={{ color: "var(--bf-fire)" }}>*</span></ModalLabel>
@@ -316,7 +325,7 @@ function McpManager({ agentId }: { agentId: string }) {
                 placeholder="npx"
                 autoComplete="off"
               />
-              {formErrors.command && <p className="text-rose-300 text-xs mt-1">{formErrors.command}</p>}
+              {formErrors.command && <p className="text-xs mt-1" style={{ color: "var(--bf-yellow)" }}>{formErrors.command}</p>}
             </div>
             <div className="sm:col-span-2">
               <ModalLabel>Arguments</ModalLabel>
@@ -440,7 +449,11 @@ function CopyButton({ value }: { value: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <button onClick={copy} title="Copy" className="p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0">
+    <button
+      onClick={copy}
+      title="Copy"
+      className="p-1 rounded transition-colors flex-shrink-0 hover:bg-[color-mix(in_srgb,var(--bf-blanche)_12%,transparent)]"
+    >
       {copied
         ? <Check size={12} style={{ color: "var(--bf-accent)" }} />
         : <Copy size={12} style={{ color: "var(--bf-gray)" }} />
@@ -500,7 +513,7 @@ function ManifestViewer({ agentId }: { agentId: string }) {
     );
   }
   if (state === "loading") return <span className="text-xs" style={{ color: "var(--bf-gray)" }}>Loading…</span>;
-  if (state === "error") return <span className="text-xs" style={{ color: "var(--bf-red)" }}>{err}</span>;
+  if (state === "error") return <span className="text-xs" style={{ color: "var(--bf-yellow)" }}>{err}</span>;
   if (!manifest) return null;
 
   return (
@@ -545,7 +558,7 @@ const BLOB_DEFS = [
     key: "bundleUri" as const,
     label: "Encrypted Bundle",
     icon: Lock,
-    color: "#f05b5b",
+    color: "var(--bf-symbol)",
     desc: "AES-256-GCM encrypted blob containing soul, operating rules, and LLM config. Only the platform executor can decrypt this.",
     viewable: false,
   },
@@ -553,7 +566,7 @@ const BLOB_DEFS = [
     key: "sealedDEKBaseUri" as const,
     label: "Sealed DEK",
     icon: Key,
-    color: "#fbbf24",
+    color: "var(--bf-yellow)",
     desc: "ECIES-sealed Data Encryption Key. Used by the platform executor to decrypt the bundle at inference time.",
     viewable: false,
   },
@@ -593,7 +606,10 @@ function InftVisualiser({ agent }: { agent: Agent }) {
               {/* Token ID */}
               <div className="flex items-baseline gap-3 flex-wrap">
                 <span className="text-4xl font-black text-white">#{agent.tokenId}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: "rgba(251,146,60,0.15)", color: "var(--bf-fire)" }}>
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: "color-mix(in srgb, var(--bf-plum) 18%, transparent)", color: "var(--bf-fire)" }}
+                >
                   BonFireAgentINFT
                 </span>
               </div>
@@ -613,7 +629,7 @@ function InftVisualiser({ agent }: { agent: Agent }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition-opacity hover:opacity-80"
-                    style={{ background: "var(--bf-fire)", color: "white" }}
+                    style={{ background: "var(--bf-fire)", color: "var(--bf-blanche)" }}
                   >
                     <ExternalLink size={12} strokeWidth={2} />
                     View on 0G Explorer
@@ -670,7 +686,15 @@ function InftVisualiser({ agent }: { agent: Agent }) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-white">{label}</span>
                         {!viewable && (
-                          <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(240,91,91,0.12)", color: "#f05b5b" }}>encrypted</span>
+                          <span
+                            className="text-xs px-1.5 py-0.5 rounded"
+                            style={{
+                              background: "color-mix(in srgb, var(--bf-yellow) 16%, transparent)",
+                              color: "var(--bf-yellow)",
+                            }}
+                          >
+                            encrypted
+                          </span>
                         )}
                       </div>
                       <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--bf-gray)" }}>{desc}</p>
@@ -703,8 +727,8 @@ function InftVisualiser({ agent }: { agent: Agent }) {
           <p className="font-semibold text-white mb-1">How BonFire uses this data</p>
           <ul className="flex flex-col gap-1 list-disc list-inside">
             <li>The <span style={{ color: "var(--bf-accent)" }}>Public Manifest</span> populates the marketplace listing — name, bio, tags, and model info.</li>
-            <li>The <span style={{ color: "#f05b5b" }}>Encrypted Bundle</span> is decrypted by the platform executor at inference time to restore the agent&apos;s soul and config.</li>
-            <li>The <span style={{ color: "#fbbf24" }}>Sealed DEK</span> ensures only the authorised executor can decrypt the bundle — enforced by ECIES + TEE.</li>
+            <li>The <span style={{ color: "var(--bf-symbol)" }}>Encrypted Bundle</span> is decrypted by the platform executor at inference time to restore the agent&apos;s soul and config.</li>
+            <li>The <span style={{ color: "var(--bf-yellow)" }}>Sealed DEK</span> ensures only the authorised executor can decrypt the bundle — enforced by ECIES + TEE.</li>
             <li>The <span style={{ color: "var(--bf-fire)" }}>bundle hash</span> is written on-chain at mint and verified on every bundle load — tamper-proof.</li>
           </ul>
         </div>
@@ -842,7 +866,7 @@ function LogRow({ log }: { log: AgentLog }) {
 
   const iconColor = log.level === "tool" ? "var(--bf-accent)"
     : log.level === "warn" ? "var(--bf-yellow)"
-    : log.level === "error" ? "var(--bf-red)"
+    : log.level === "error" ? "var(--bf-accent)"
     : "var(--bf-gray)";
 
   const time = new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });

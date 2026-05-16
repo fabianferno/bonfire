@@ -122,10 +122,10 @@ export default function CenterPane() {
             </button>
           )}
           {[
-            { Icon: Bell,       title: "Notification Preferences" },
-            { Icon: Pin,        title: "Pinned Messages" },
-            { Icon: Users,      title: "Member List" },
-            { Icon: Search,     title: "Search" },
+            { Icon: Bell, title: "Notification Preferences" },
+            { Icon: Pin, title: "Pinned Messages" },
+            { Icon: Users, title: "Member List" },
+            { Icon: Search, title: "Search" },
             { Icon: HelpCircle, title: "Help" },
           ].map(({ Icon, title }) => (
             <button
@@ -208,7 +208,12 @@ function NoServersHero() {
   return (
     <div className="flex-1 overflow-y-auto" style={{ background: "var(--bf-primary)" }}>
       <div className="max-w-3xl mx-auto px-8 py-16 flex flex-col items-center text-center">
-        <div className="text-6xl mb-4 leading-none select-none" role="img" aria-label="BonFire">{BF_BRAND_EMOJI}</div>
+        <iframe
+          src="/flame.html"
+          title="flame"
+          aria-label="BonFire"
+          style={{ width: 360, height: 360, border: 0, background: "transparent", display: "block", marginLeft: "auto", marginRight: "auto" }}
+        />
 
         {editing ? (
           <div className="flex items-center gap-2 mb-2">
@@ -363,8 +368,13 @@ function NoServerSelectedHero() {
 function NoChannelSelected({ serverName }: { serverName: string }) {
   return (
     <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bf-primary)" }}>
-      <div className="text-center max-w-md px-8" style={{ color: "var(--bf-gray)" }}>
-        <Hash size={32} className="mx-auto mb-3" style={{ color: "var(--bf-symbol)" }} strokeWidth={1.5} />
+      <div className="text-center max-w-md px-8 -mt-24" style={{ color: "var(--bf-gray)" }}>
+        <iframe
+          src="/flame.html"
+          title="flame"
+          className="mx-auto mb-3 block"
+          style={{ width: 360, height: 420, border: 0, background: "transparent", display: "block", marginLeft: "auto", marginRight: "auto" }}
+        />
         <p className="font-bold text-white text-xl">No channel selected</p>
         <p className="text-sm mt-1">
           Pick a text or voice channel in <span className="text-white font-semibold">{serverName}</span> to start chatting.
@@ -463,8 +473,8 @@ function VoiceStatusPane({
                   gridTemplateColumns: voice.participants.length === 1
                     ? "1fr"
                     : voice.participants.length <= 4
-                    ? "repeat(2, 1fr)"
-                    : "repeat(3, 1fr)",
+                      ? "repeat(2, 1fr)"
+                      : "repeat(3, 1fr)",
                   gridAutoRows: "1fr",
                   minHeight: 0,
                 }}
@@ -610,8 +620,8 @@ function ParticipantTile({
         border: speaking
           ? "2px solid #23d05e"
           : talkingTo
-          ? "2px solid var(--bf-accent)"
-          : "2px solid rgba(255,255,255,0.06)",
+            ? "2px solid var(--bf-accent)"
+            : "2px solid rgba(255,255,255,0.06)",
         boxShadow: speaking ? "0 0 0 4px rgba(35,208,94,0.15)" : undefined,
         minHeight: 120,
         cursor: onTalk ? "pointer" : "default",

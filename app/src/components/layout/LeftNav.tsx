@@ -284,12 +284,12 @@ function ServerPill({
         {icon
           ? <img src={icon} alt={name} className="w-7 h-7 object-cover" />
           : <Avatar
-              name={name}
-              size={48}
-              variant="bauhaus"
-              colors={["#f97316", "#faa61a", "#ed1b24", "#6633cc", "#00d8ff"]}
-              square
-            />
+            name={name}
+            size={48}
+            variant="bauhaus"
+            colors={["#f97316", "#faa61a", "#ed1b24", "#6633cc", "#00d8ff"]}
+            square
+          />
         }
       </button>
     </div>
@@ -298,7 +298,7 @@ function ServerPill({
 
 function NavPill({
   children, title, onClick, accentColor,
-  iconColor = "#ffffff",
+  iconColor = "#000000",
 }: {
   children: React.ReactNode;
   title: string;

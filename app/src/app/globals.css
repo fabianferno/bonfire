@@ -32,7 +32,7 @@
   /* Marketplace hero + wide surfaces (0G / plum sweep) */
   --bf-brand-hero-gradient: linear-gradient(160deg, #0a0014 0%, #2a0060 45%, #8116e0 100%);
   /* Left-nav action pills — diagonal read at small sizes */
-  --bf-nav-pill-gradient: linear-gradient(45deg, #0a0014 0%, #2a0060 45%, #8116e0 100%);
+  --bf-nav-pill-gradient: linear-gradient(45deg,     #D0FF00 100%);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }

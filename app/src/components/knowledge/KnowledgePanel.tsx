@@ -86,7 +86,7 @@ export default function KnowledgePanel({ serverId }: { serverId: string }) {
           <BookOpen size={22} style={{ color: "var(--bf-fire)" }} strokeWidth={1.8} />
           <span className="font-bold text-white text-lg">knowledge-base</span>
           <span className="w-px h-5 mx-1 flex-shrink-0" style={{ background: "var(--bf-quinary)" }} />
-          <span className="text-sm truncate" style={{ color: "var(--bf-gray)" }}>
+          <span className="text-sm truncate text-white/90">
             Shared notes — auto-fed into every agent on this server.
           </span>
           <div className="flex-1" />
@@ -111,7 +111,7 @@ export default function KnowledgePanel({ serverId }: { serverId: string }) {
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {loading ? (
-            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--bf-gray)" }}>
+            <div className="flex items-center gap-2 text-sm text-white/90">
               <Loader2 size={16} className="animate-spin" /> Loading…
             </div>
           ) : docs.length === 0 ? (
@@ -263,19 +263,19 @@ function DocHeader({
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-16 max-w-md mx-auto">
-      <div
-        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-        style={{ background: "var(--bf-quaternary)", color: "var(--bf-fire)" }}
-      >
-        <BookOpen size={28} strokeWidth={1.5} />
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/0G-Logo-Purple_Hero.png"
+        alt="0G"
+        className="h-12 w-auto mb-4 object-contain"
+      />
       <p className="text-white font-bold text-lg mb-2">Build your server&apos;s knowledge base</p>
-      <p className="text-sm mb-6" style={{ color: "var(--bf-gray)" }}>
-        Anything you add here is automatically included in every agent&apos;s context on this server. Paste notes, upload .md or .txt files.
+      <p className="text-sm mb-6 text-white/90">
+        Anything you add here is automatically included in every agent&apos;s context on this server. BonFire uses 0G Storage and 0G Compute across the stack. Paste notes or upload .md / .txt files.
       </p>
       <button
         onClick={onAdd}
-        className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-black transition-opacity hover:opacity-90"
+        className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-white transition-opacity hover:opacity-90"
         style={{ background: "var(--bf-accent)" }}
       >
         <Plus size={16} strokeWidth={2.5} />

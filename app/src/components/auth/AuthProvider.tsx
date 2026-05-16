@@ -109,12 +109,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Backend identity sync ────────────────────────────────────────────────
   // POST /v1/auth/privy/verify exchanges the Privy access token for our
   // canonical Mongo user record. We swap `id` (Privy DID → Mongo hex) so
-  // owner / membership / audit-log checks line up with backend ObjectIds.
-  const [backendId, setBackendId] = useState<string | null>(null);
+  // owner / membership / audit-log checks line up with backend ObjectIds,
+  // and we adopt the backend's username/displayName so the UI shows a
+  // humane name instead of "didprivy…" when Privy has no email claim.
+  const [backendProfile, setBackendProfile] = useState<{
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !baseUser) {
-      setBackendId(null);
+      setBackendProfile(null);
       return;
     }
     let cancelled = false;
@@ -124,7 +131,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!token) return;
         const resp = await api<BackendVerifyResponse>('POST', '/v1/auth/privy/verify', { token });
         if (!cancelled && resp?.user?.id) {
-          setBackendId(resp.user.id);
+          setBackendProfile({
+            id: resp.user.id,
+            username: resp.user.username,
+            displayName: resp.user.displayName,
+            avatarUrl: resp.user.avatarUrl ?? null,
+          });
         }
       } catch {
         // Soft-fail — the audit channel will stay hidden until next attempt.
@@ -135,7 +147,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated, baseUser?.privyDid]);
 
   const resolvedUser: AuthUser | null = baseUser
-    ? { ...baseUser, id: backendId ?? baseUser.id }
+    ? {
+        ...baseUser,
+        id: backendProfile?.id ?? baseUser.id,
+        username: backendProfile?.username ?? baseUser.username,
+        displayName: backendProfile?.displayName ?? baseUser.displayName,
+        avatarUrl: backendProfile?.avatarUrl ?? baseUser.avatarUrl,
+      }
     : null;
 
   const value: AuthState = {

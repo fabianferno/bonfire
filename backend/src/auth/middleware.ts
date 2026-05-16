@@ -47,6 +47,17 @@ export function requireUser(db: Db, _jwtSecret?: string): MiddlewareHandler<Auth
 
     const { privyDid, walletAddress, email } = claims;
 
+    // Derive a humane username + displayName. Prefer the email local-part
+    // (e.g. "philosanjay5@gmail.com" → "philosanjay5") and fall back to the
+    // Privy DID stripped down only when no email is available.
+    const emailLocal = email ? email.split('@')[0]?.trim().toLowerCase() : '';
+    const safeFromEmail = emailLocal
+      ? emailLocal.replace(/[^a-z0-9._-]/g, '').slice(0, 32)
+      : '';
+    const safeFromDid = privyDid.replace(/[^a-z0-9_-]/gi, '').slice(0, 32).toLowerCase();
+    const defaultUsername = safeFromEmail || safeFromDid || 'user';
+    const defaultDisplayName = emailLocal || email || privyDid.slice(0, 20);
+
     // Upsert UserDoc: insert on first login, update wallet/email on subsequent calls.
     // Uses findOneAndUpdate with upsert so the operation is atomic.
     const now = new Date();
@@ -62,8 +73,8 @@ export function requireUser(db: Db, _jwtSecret?: string): MiddlewareHandler<Auth
           _id: new ObjectId(),
           privyDid,
           passwordHash: null,
-          username: privyDid.replace(/[^a-z0-9_-]/gi, '').slice(0, 32).toLowerCase() || 'user',
-          displayName: email ?? privyDid.slice(0, 20),
+          username: defaultUsername,
+          displayName: defaultDisplayName,
           avatarUrl: null,
           bio: null,
           isService: false,

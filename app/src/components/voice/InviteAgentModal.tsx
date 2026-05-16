@@ -12,6 +12,13 @@ import { agentAvatarDisplayUrl } from "@/lib/agent-identicon";
 interface Props {
   channelId: string;
   sessionId: string;
+  /**
+   * Server the voice room belongs to. When provided, the modal lists only
+   * agents that are members of this server (text-channel sidebar list).
+   * Falls back to "all marketplace agents" when omitted so the modal still
+   * works in legacy contexts.
+   */
+  serverId?: string;
   onClose(): void;
   onInvited(agentSlug: string): void;
 }
@@ -21,6 +28,7 @@ interface Props {
 export default function InviteAgentModal({
   channelId,
   sessionId,
+  serverId,
   onClose,
   onInvited,
 }: Props) {
@@ -49,12 +57,24 @@ export default function InviteAgentModal({
 
     (async () => {
       try {
-        const result = await bf.listAgents({ limit: 100 });
-        // Only show INFT-backed agents (those with a tokenId field)
-        // BackendAgent doesn't expose tokenId but the backend contract says
-        // only INFT-backed agents are invitable. We show all public agents
-        // and let the backend return 400 agent_not_invitable for non-INFT ones.
-        setAgents(result.agents);
+        // Pull the marketplace list (full BackendAgent metadata) AND, when we
+        // have a serverId, the server's agent members. The intersection by
+        // principalId is the invite list — only agents already added to this
+        // server show up.
+        const [{ agents: marketplace }, memberSet] = await Promise.all([
+          bf.listAgents({ limit: 100 }),
+          serverId
+            ? bf.listMembers(serverId, "agent")
+                .then((r) => new Set(r.members.map((m) => m.principalId)))
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
+
+        const filtered =
+          memberSet !== null
+            ? marketplace.filter((a) => memberSet.has(a.id))
+            : marketplace;
+        setAgents(filtered);
       } catch (err) {
         setFetchError(
           err instanceof Error ? err.message : "Failed to load agents.",
@@ -63,7 +83,8 @@ export default function InviteAgentModal({
         setLoading(false);
       }
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverId]);
 
   // Filtered list
   const filtered = query.trim()

@@ -96,7 +96,34 @@ export function serverRoutes(deps: ServerRouteDeps) {
     const typeParam = c.req.query('type');
     const type = typeParam === 'user' || typeParam === 'agent' ? typeParam : undefined;
     const members = await listServerMembers(deps.db, c.get('server')._id, type);
-    return c.json({ members: members.map(publicMember) });
+
+    // Join with users to surface real username/displayName/avatarUrl on user-type
+    // memberships — frontend previously fell back to rendering principalId (hex)
+    // which read like a Privy DID.
+    const userIds = members
+      .filter((m) => m.principalType === 'user')
+      .map((m) => m.principalId);
+    type UserMini = { _id: ObjectId; username?: string; displayName?: string; avatarUrl?: string | null };
+    const userDocs = userIds.length === 0
+      ? []
+      : await deps.db.collection<UserMini>(collections.users)
+          .find({ _id: { $in: userIds } }, { projection: { username: 1, displayName: 1, avatarUrl: 1 } })
+          .toArray();
+    const byId = new Map(userDocs.map((u) => [u._id.toHexString(), u]));
+
+    const enriched = members.map((m) => {
+      const base = publicMember(m);
+      if (m.principalType !== 'user') return base;
+      const u = byId.get(m.principalId.toHexString());
+      if (!u) return base;
+      return {
+        ...base,
+        username: u.username ?? null,
+        displayName: u.displayName ?? null,
+        avatarUrl: u.avatarUrl ?? null,
+      };
+    });
+    return c.json({ members: enriched });
   });
 
   app.get('/v1/servers/:sid/channels', requireAuth, requireServerMember(deps.db), async (c) => {

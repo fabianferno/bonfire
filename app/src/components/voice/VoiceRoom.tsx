@@ -8,6 +8,7 @@ import { voiceApi, type VoiceSession, type VoiceBot } from "@/lib/voice";
 import VoiceParticipantTile from "./VoiceParticipantTile";
 import { useVoiceCall } from "./useVoiceCall";
 import InviteAgentModal from "./InviteAgentModal";
+import { useApp } from "@/context/AppContext";
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,9 @@ function VoiceRoomInner({
 }: VoiceRoomProps & { session: VoiceSession }) {
   const { joinState, participants, micMuted, toggleMic, deafened, toggleDeafen, leave, error } =
     useVoiceCall({ roomUrl: session.roomUrl, token: session.token });
+  // Server-scoped agent list for the invite modal — only show agents that
+  // are members of the active server, not the whole marketplace.
+  const { activeServerId } = useApp();
 
   const didLeaveRef = useRef(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -340,6 +344,7 @@ function VoiceRoomInner({
       <InviteAgentModal
         channelId={channelId}
         sessionId={session.sessionId}
+        serverId={activeServerId || undefined}
         onClose={() => setShowInviteModal(false)}
         onInvited={(slug) => {
           // Optimistically add to invited bots list; polling will confirm

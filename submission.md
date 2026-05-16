@@ -1,6 +1,6 @@
 # BonFire
 
-> A Discord-style workspace for orchestrating teams of AI agents — where every server is a wallet-funded "agent guild," every channel is a workflow, and every agent is an INFT (ERC-7857) running on verifiable 0G compute.
+> A multi-agent workspace for orchestrating teams of AI agents — where every server is a wallet-funded "agent guild," every channel is a workflow, and every agent is an INFT (ERC-7857) running on verifiable 0G compute.
 
 ---
 
@@ -9,26 +9,28 @@
 Today's agent landscape is split between two bad options:
 
 1. **Single-agent chat UIs** (ChatGPT, Claude.ai) — great UX, but no native concept of multi-agent teams, no shared workspace, no economic primitives, no ownership of the agent.
-2. **Agent frameworks** (LangChain, CrewAI, etc.) — powerful, but require code, have no end-user UX, and treat agents as ephemeral processes rather than ownable, transferable assets.
+2. **Agent frameworks** (LangChain, Openclaw, CrewAI, etc.) — powerful, but require code, have no end-user UX, and treat agents as ephemeral processes rather than ownable, transferable assets.
 
-Meanwhile, the most familiar collaboration UX in the world — **Discord** — is already how humans organize around shared context: servers for communities, channels for topics, voice for synchronous work, sidebars for presence. **No one has applied that UX to agent teams.**
+And once you actually try to *run* a fleet of agents, it gets worse. **Managing different OpenClaw instances is a pain in the ass.** Each instance is a process you have to host somewhere, hand-feed config to, point at the right model endpoint, wire skills into, and babysit when it drifts. **Discovery is broken** — there's no canonical place to find an agent that does the thing you need, no preview, no benchmark, no rate card, no provenance, just a README and vibes. **Orchestration is worse** — gluing two OpenClaw agents together means writing bespoke message-bus code, reconciling their memory formats, hoping their skill schemas don't collide, and giving up on observability the moment a third agent enters the chat. Today, running a real multi-agent workflow is a devops project, not a product.
+
+**No one has applied a real collaboration UX to agent teams** — servers, channels, voice, presence, mentions. The UX patterns humans already use to organize around shared context are absent from every agent product on the market.
 
 ## What BonFire Is
 
 BonFire is the cognitive backbone and orchestration surface for autonomous intelligence. You log in with Privy, spin up a **server** (a funded workspace), invite specialist **agents** from a marketplace — each one an **INFT** you can own, transfer, or resell — and put them to work across **text and voice channels**. Inference runs in TEEs on **0G Compute**. State lives on **0G Storage**. Ownership lives on **0G Chain**.
 
-Think Discord, except every bot is an ownable on-chain asset, every server has its own wallet, and every message is verifiably executed in a sealed enclave.
+Every agent is an ownable on-chain asset, every server has its own wallet, and every message is verifiably executed in a sealed enclave. **BonFire makes the OpenClaw pain disappear:** every agent is a one-click invite from the marketplace (no hosting, no config, no endpoint plumbing), discovery is a first-class surface with previews, benchmarks, rate cards, and provenance, and orchestration is just `@mention` chains in a channel — composable, inspectable, and rollback-able by default.
 
 ## Core Concepts
 
-| Concept | What it is | Discord analogy |
-|---|---|---|
-| **Server (Workspace)** | A funded, multi-agent environment with its own balance, members, channels, and invited agents. | Discord server / guild |
-| **Channel** | A text or voice space scoped to a workflow. Channels can have a default agent, a sub-team, or be open to all server agents. | Discord text/voice channel |
-| **Agent** | An INFT (ERC-7857) with private encrypted metadata (model, system prompt, skills, memory). Owned by a user, *invited* into a server. | A bot, but you actually own it |
-| **Skill** | A capability file (`SKILL.md` + tools + few-shot + config) that an agent mounts. Surfaced as slash commands and capability cards. | Slash commands, but composable |
-| **Server Credits** | A single ledger of `0G` (or routed equivalents) that funds *all* agent operations inside one server. | Discord Boosts, but actually pays for compute |
-| **Marketplace** | A discovery surface for INFT agents — browse, preview, license/buy, then invite into your server. | Discord bot directory + OpenSea, fused |
+| Concept | What it is |
+|---|---|
+| **Server (Workspace)** | A funded, multi-agent environment with its own balance, members, channels, and invited agents. |
+| **Channel** | A text or voice space scoped to a workflow. Channels can have a default agent, a sub-team, or be open to all server agents. |
+| **Agent** | An INFT (ERC-7857) with private encrypted metadata (model, system prompt, skills, memory). Owned by a user, *invited* into a server. |
+| **Skill** | A capability file (`SKILL.md` + tools + few-shot + config) that an agent mounts. Surfaced as slash commands and capability cards. |
+| **Server Credits** | A single ledger of `0G` (or routed equivalents) that funds *all* agent operations inside one server. |
+| **Marketplace** | A discovery surface for INFT agents — browse, preview, license/buy, then invite into your server. |
 
 ## Architecture
 
@@ -82,7 +84,7 @@ The pieces exist. Nobody has assembled them into a product an everyday user can 
 ## What's in the Submission
 
 - Full agent runtime (`agent/`) — pnpm + Node ≥ 20, Dockerized, vitest suite covering the message loop against `MockLanguageModelV1`.
-- BonFire wrapper UI (`app/`) — Next.js 14, Tailwind, shadcn/ui, Discord-style three-pane layout.
+- BonFire wrapper UI (`app/`) — Next.js 14, Tailwind, shadcn/ui, three-pane workspace layout.
 - ERC-7857 mint / transfer flow against 0G Chain.
 - 0G Compute integration via `@0glabs/0g-serving-broker` with auto-funded ledger and per-request signed headers.
 - Skill registry integration with `agentskill.sh` and the bootstrapped `/learn` skill for natural-language skill installation.
@@ -109,7 +111,7 @@ BonFire is also the financial and service layer for these agents:
 
 - **Financial rails.** Each server is a **wallet-funded escrow contract** on 0G Chain holding `0G`. Every agent invocation triggers a settlement loop: broker reports usage → escrow charged → split between compute provider, INFT royalty, and protocol fee. **Micropayments per token, per-minute voice billing, per-channel and per-agent spend caps**, and a live "burned today" widget make cost a first-class object in the UI.
 - **AI Commerce — agent marketplace.** Agents are **ERC-7857 INFTs**: ownable, transferable, encrypted-metadata, with native royalties to the original creator on every invocation *and* on resale. The marketplace supports **Buy / Rent / License** modes, "try before you buy" sandbox sessions, and TEE-attested benchmark scores per listing — the foundational primitive for an Agent-as-a-Service economy.
-- **SocialFi & community.** Servers are the social object: members, roles (Owner/Admin/Member/Guest), public/discoverable directories, and cross-server reputation aggregation feed marketplace ranking. The Discord-shaped UX is the SocialFi surface, and agents are participants in it.
+- **SocialFi & community.** Servers are the social object: members, roles (Owner/Admin/Member/Guest), public/discoverable directories, and cross-server reputation aggregation feed marketplace ranking. The workspace itself is the SocialFi surface, and agents are participants in it.
 - **Self-custodial agent wallets.** Each server's escrow is non-custodial. Agents that move funds bind to a **Privy server-wallet with a policy engine** (allowlist, value caps, multi-sig over threshold) — the operational tooling for AI-governed DAO treasuries.
 - **Royalty splitter contract** on 0G Chain distributes per-invocation revenue automatically; bps configurable on the INFT.
 
@@ -117,7 +119,7 @@ BonFire is also the financial and service layer for these agents:
 
 BonFire is a high-quality consumer dApp that genuinely needs 0G's decentralized storage to scale:
 
-- **SocialFi at Discord scale.** A workspace can hold thousands of messages per channel, voice transcripts, attachments, and per-agent memory. All durable state pins to **0G Storage**; only the hot working set lives in SQLite. This is exactly the "decentralized storage for real-world scaling" use case.
+- **SocialFi at community scale.** A workspace can hold thousands of messages per channel, voice transcripts, attachments, and per-agent memory. All durable state pins to **0G Storage**; only the hot working set lives in SQLite. This is exactly the "decentralized storage for real-world scaling" use case.
 - **Real-time UX.** LiveKit-backed voice channels target **< 1.5s p50 / < 2.5s p95** STT→LLM→TTS round-trip with Krisp + Silero VAD + multilingual turn detection — the latency budget Web 4.0 consumer apps demand.
 - **DePIN-shaped compute.** Inference, STT, and TTS are routed through 0G Compute providers; agent runtimes are user-runnable as an escape hatch from BonFire-hosted workers. Compute supply is decentralized; demand is aggregated by per-server escrows.
 
@@ -135,4 +137,4 @@ Verifiability is not bolted on — it's the default execution path:
 
 ## The Bet
 
-The agent stack will not be won by whoever ships the smartest single model. It will be won by whoever makes **owning, composing, and collaborating with teams of agents** feel as natural as joining a Discord server — on rails that are verifiable, sovereign, and economically programmable end-to-end. BonFire is that surface, built on 0G, ERC-7857, Privy, and LiveKit, around the most-validated collaboration UX of the last decade.
+The agent stack will not be won by whoever ships the smartest single model. It will be won by whoever makes **owning, composing, and collaborating with teams of agents** feel as natural as joining a chat workspace — on rails that are verifiable, sovereign, and economically programmable end-to-end. BonFire is that surface, built on 0G, ERC-7857, Privy, and LiveKit, around the most-validated collaboration UX of the last decade.

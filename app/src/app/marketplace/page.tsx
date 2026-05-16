@@ -209,7 +209,8 @@ function AgentDetailOverlay({
 }) {
   const [agent, setAgent] = useState(initialAgent);
   const [showEdit, setShowEdit] = useState(false);
-  const { walletAddress } = useAuth();
+  const { user } = useAuth();
+  const walletAddress = user?.walletAddress ?? null;
   const isCreator = !!walletAddress && !!agent.ownerWallet &&
     agent.ownerWallet.toLowerCase() === walletAddress.toLowerCase();
 

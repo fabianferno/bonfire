@@ -5,6 +5,7 @@ import type { Agent, AgentLog } from "@/context/AppContext";
 import Modal from "@/components/shared/Modal";
 import Avatar from "@/components/shared/Avatar";
 import { appAgentAvatarSrc } from "@/lib/agent-identicon";
+import { BF_DISPLAY_AGENT_MODEL } from "@/lib/brand";
 import SkillManager from "./SkillManager";
 import { bf, type McpServerConfig } from "@/lib/api-bonfire";
 import { ModalLabel, ModalInput } from "@/components/shared/Modal";
@@ -729,7 +730,6 @@ const ADAPTERS = [
 // ---------------------------------------------------------------------------
 
 function OverviewStats({ agentId }: { agentId: string }) {
-  const [model, setModel] = useState<string | null>(null);
   const [priceOg, setPriceOg] = useState<string | null>(null);
   const [displayed, setDisplayed] = useState("0.000000");
   const accRef = useRef(0);
@@ -738,12 +738,8 @@ function OverviewStats({ agentId }: { agentId: string }) {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([
-      bf.getAgentConfig(agentId).catch(() => ({ model: null, provider: null, temperature: null })),
-      bf.getAgentEarnings(agentId).catch(() => ({ totalEarnedOg: "0", priceOg: "0" })),
-    ]).then(([cfg, earnings]) => {
+    bf.getAgentEarnings(agentId).catch(() => ({ totalEarnedOg: "0", priceOg: "0" })).then((earnings) => {
       if (cancelled) return;
-      if (cfg.model) setModel(cfg.model);
       const price = earnings.priceOg ?? "0";
       setPriceOg(price);
       const seed = parseFloat(earnings.totalEarnedOg ?? "0");
@@ -768,8 +764,8 @@ function OverviewStats({ agentId }: { agentId: string }) {
       {/* Model */}
       <div className="rounded-lg p-3" style={{ background: "var(--bf-quaternary)" }}>
         <p className="text-xs uppercase tracking-wide mb-1 font-semibold" style={{ color: "var(--bf-gray)" }}>Model</p>
-        <p className="text-white font-semibold text-sm truncate" title={model ?? undefined}>
-          {model ?? "—"}
+        <p className="text-white font-semibold text-sm truncate" title={BF_DISPLAY_AGENT_MODEL}>
+          {BF_DISPLAY_AGENT_MODEL}
         </p>
       </div>
 

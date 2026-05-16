@@ -389,10 +389,10 @@ function VoiceStatusPane({
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--bf-primary)" }}>
 
       {/* Participants area */}
-      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
+      <div className="flex-1 flex flex-col overflow-hidden">
 
         {!joined && (
-          <>
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8">
             <div
               className="w-20 h-20 rounded-full flex items-center justify-center"
               style={{ background: "var(--bf-quaternary)" }}
@@ -413,16 +413,25 @@ function VoiceStatusPane({
             >
               {voice.joining ? "Joining…" : "Join Voice"}
             </button>
-          </>
+          </div>
         )}
 
         {joined && (
           <>
-            {/* Participant tiles */}
-            {(voice.participants.length > 0) && (
+            {/* Discord-style full-bleed participant grid */}
+            {voice.participants.length > 0 && (
               <div
-                className="grid gap-4 w-full max-w-2xl"
-                style={{ gridTemplateColumns: `repeat(${Math.min(Math.max(voice.participants.length, 1), 4)}, 1fr)` }}
+                className="flex-1 p-3 gap-2"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: voice.participants.length === 1
+                    ? "1fr"
+                    : voice.participants.length <= 4
+                    ? "repeat(2, 1fr)"
+                    : "repeat(3, 1fr)",
+                  gridAutoRows: "1fr",
+                  minHeight: 0,
+                }}
               >
                 {voice.participants.map(p => {
                   const info = participantInfo[p.userId];
@@ -447,7 +456,7 @@ function VoiceStatusPane({
               const name = info?.name ?? agent?.userName ?? "Agent";
               return (
                 <div
-                  className="w-full max-w-2xl flex items-center gap-3 rounded-xl px-4 py-3"
+                  className="mx-3 mb-2 flex items-center gap-3 rounded-xl px-4 py-3 flex-shrink-0"
                   style={{ background: "var(--bf-quaternary)", border: "1px solid var(--bf-quinary)" }}
                 >
                   <span className="text-sm font-semibold flex-shrink-0" style={{ color: "var(--bf-accent)" }}>
@@ -474,7 +483,7 @@ function VoiceStatusPane({
 
             {/* Invite agents */}
             {availableAgents.length > 0 && (
-              <div className="w-full max-w-2xl">
+              <div className="mx-3 mb-2 flex-shrink-0">
                 <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--bf-gray)" }}>
                   Invite agents to voice
                 </p>
@@ -542,7 +551,6 @@ function ParticipantTile({
 }: {
   participant: VoiceParticipant;
   emoji?: string;
-  /** Hex fallback color or image URL (e.g. identicon). */
   color?: string;
   onTalk?: () => void;
   talkingTo?: boolean;
@@ -554,56 +562,67 @@ function ParticipantTile({
   const avatarSrc = color && !color.startsWith("#") ? color : undefined;
   const fallbackColor = color?.startsWith("#") ? color : "var(--bf-plum)";
 
+  const speaking = participant.speaking;
+
   return (
     <div
-      className="flex flex-col items-center gap-3 p-5 rounded-2xl transition-all"
+      className="relative rounded-xl overflow-hidden flex items-center justify-center transition-all"
+      onClick={onTalk}
+      role={onTalk ? "button" : undefined}
       style={{
-        background: participant.speaking ? "rgba(208,255,0,0.08)" : "var(--bf-secondary)",
-        border: participant.speaking
-          ? "1px solid rgba(208,255,0,0.35)"
+        background: "var(--bf-secondary)",
+        border: speaking
+          ? "2px solid #23d05e"
           : talkingTo
-          ? "1px solid var(--bf-accent)"
-          : "1px solid var(--bf-quinary)",
+          ? "2px solid var(--bf-accent)"
+          : "2px solid rgba(255,255,255,0.06)",
+        boxShadow: speaking ? "0 0 0 4px rgba(35,208,94,0.15)" : undefined,
+        minHeight: 120,
+        cursor: onTalk ? "pointer" : "default",
       }}
     >
-      <div className="relative">
-        <Avatar
-          name={participant.userName}
-          size={60}
-          color={fallbackColor}
-          emoji={emoji}
-          src={avatarSrc}
+      {/* Avatar centered */}
+      <Avatar
+        name={participant.userName}
+        size={72}
+        color={fallbackColor}
+        emoji={emoji}
+        src={avatarSrc}
+      />
+
+      {/* Speaking pulse ring */}
+      {speaking && (
+        <span
+          className="absolute inset-0 rounded-xl pointer-events-none animate-pulse"
+          style={{ border: "2px solid rgba(35,208,94,0.4)" }}
         />
-        {participant.speaking && (
-          <span
-            className="absolute -bottom-1 -right-1 rounded-full text-xs flex items-center justify-center"
-            style={{ width: 20, height: 20, background: "var(--bf-accent)", fontSize: 10 }}
-          >
-            🔊
-          </span>
-        )}
-      </div>
-
-      <div className="text-center">
-        <p className="text-white text-sm font-bold truncate max-w-24">{displayName}</p>
-        <p className="text-xs mt-0.5" style={{ color: "var(--bf-gray)" }}>
-          {participant.isAgent ? "Agent" : "You"}
-        </p>
-      </div>
-
-      {participant.isAgent && onTalk && (
-        <button
-          onClick={onTalk}
-          className="text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-          style={{
-            background: talkingTo ? "var(--bf-accent)" : "var(--bf-quaternary)",
-            color: talkingTo ? "white" : "var(--bf-gray)",
-            border: "1px solid var(--bf-quinary)",
-          }}
-        >
-          {talkingTo ? "Talking…" : "Talk"}
-        </button>
       )}
+
+      {/* Name + role bar at bottom */}
+      <div
+        className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2"
+        style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {speaking && (
+            <span className="flex-shrink-0 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          )}
+          <p className="text-white text-sm font-semibold truncate">{displayName}</p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {participant.isAgent && (
+            <span
+              className="text-xs font-bold px-1.5 py-0.5 rounded"
+              style={{ background: "var(--bf-accent)", color: "white", fontSize: 9 }}
+            >
+              BOT
+            </span>
+          )}
+          {talkingTo && (
+            <span className="text-xs font-semibold" style={{ color: "var(--bf-accent)" }}>Chatting</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -114,6 +114,16 @@ export interface ChannelDoc {
   position: number;
   cascadeEnabled?: boolean;
   createdAt: Date;
+  /**
+   * Private (TEE-attested) channel. When true:
+   *   - knowledge-base context injection is skipped (privacy boundary).
+   *   - agent replies are stamped with a per-message attestation hash.
+   *   - audit entries are redacted to action='tee_session' + hash only.
+   * Demo-only — the attestation is computed by the backend, not by a real
+   * enclave. See createChannel() for the hash construction.
+   */
+  tee?: boolean;
+  teeAttestationHash?: string;
 }
 
 /**
@@ -171,6 +181,8 @@ export interface MessageDoc {
   cascadeHop?: number;
   createdAt: Date;
   editedAt: Date | null;
+  /** Present on agent replies sent in TEE channels — see ChannelDoc.tee. */
+  teeHash?: string;
 }
 
 export type AuditActorType = 'user' | 'agent' | 'system';

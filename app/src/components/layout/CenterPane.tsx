@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X } from "lucide-react";
+import { Hash, Volume2, Bell, Pin, Users, Search, HelpCircle, UserPlus, Mic, MicOff, Plus, Compass, Sparkles, MessageSquare, ShieldCheck, ArrowLeft, Pencil, Check, X, Lock } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useVoiceCtx, type VoiceParticipant } from "@/context/VoiceContext";
 import MessageFeed from "@/components/message/MessageFeed";
@@ -50,11 +50,29 @@ export default function CenterPane() {
         style={{ borderColor: "var(--bf-quinary)" }}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          {isVoice
-            ? <Volume2 size={22} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={1.5} />
-            : <Hash size={22} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={2} />
+          {activeChannel.tee
+            ? <Lock size={20} style={{ color: "var(--bf-fire)", flexShrink: 0 }} strokeWidth={2} />
+            : isVoice
+              ? <Volume2 size={22} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={1.5} />
+              : <Hash size={22} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={2} />
           }
           <span className="font-bold text-white text-lg">{activeChannel.name}</span>
+
+          {activeChannel.tee && activeChannel.teeAttestationHash && (
+            <button
+              type="button"
+              title={`Click to copy attestation hash\n${activeChannel.teeAttestationHash}`}
+              onClick={() => navigator.clipboard?.writeText(activeChannel.teeAttestationHash!)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-opacity hover:opacity-80"
+              style={{ background: "rgba(255,140,40,0.12)", color: "var(--bf-fire)", border: "1px solid rgba(255,140,40,0.35)" }}
+            >
+              <ShieldCheck size={12} strokeWidth={2.5} />
+              <span>TEE-attested</span>
+              <code className="font-mono text-[10px] font-normal normal-case tracking-normal" style={{ color: "var(--bf-fire)", opacity: 0.85 }}>
+                {activeChannel.teeAttestationHash.slice(0, 8)}…{activeChannel.teeAttestationHash.slice(-4)}
+              </code>
+            </button>
+          )}
 
           {activeChannel.description && (
             <>

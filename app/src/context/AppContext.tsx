@@ -94,6 +94,9 @@ export interface Channel {
   description?: string;
   messages: Message[];
   defaultAgentId?: string;
+  /** TEE-attested (private) channel — see backend ChannelDoc.tee. */
+  tee?: boolean;
+  teeAttestationHash?: string | null;
 }
 
 export interface Member {
@@ -157,6 +160,7 @@ interface AppContextValue {
     name: string,
     type: ChannelType,
     description?: string,
+    opts?: { tee?: boolean },
   ) => void;
   sendMessage: (serverId: string, channelId: string, content: string) => void;
   updateUser: (profile: Partial<UserProfile>) => void;
@@ -223,6 +227,8 @@ function mapChannel(c: BackendChannel): Channel {
     description: c.topic ?? undefined,
     messages: [],
     defaultAgentId: c.defaultAgentId ?? undefined,
+    tee: c.tee === true,
+    teeAttestationHash: c.teeAttestationHash ?? null,
   };
 }
 
@@ -297,6 +303,7 @@ function mapMessage(
     cascadeHop: m.cascadeHop,
     cascadeRootId: m.cascadeRootId,
     replyToId: m.replyToId,
+    teeHash: m.teeHash ?? undefined,
   };
 }
 
@@ -643,6 +650,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       name: string,
       type: ChannelType,
       description?: string,
+      opts?: { tee?: boolean },
     ) => {
       // Voice channels live client-side only — persist in localStorage
       if (type === "voice") {
@@ -666,6 +674,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { channel: raw } = await bf.createChannel(serverId, {
           name,
           topic: description,
+          tee: opts?.tee,
         });
         const ch = mapChannel(raw);
         setServers((prev) =>

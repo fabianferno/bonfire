@@ -11,6 +11,8 @@ export interface InsertMessageInput {
   content: string;
   mentions: MessageMention[];
   replyToId?: ObjectId | null;
+  /** TEE attestation hash — stamped on agent replies in private channels. */
+  teeHash?: string;
 }
 
 export async function insertMessage(db: Db, input: InsertMessageInput): Promise<MessageDoc> {
@@ -26,6 +28,7 @@ export async function insertMessage(db: Db, input: InsertMessageInput): Promise<
     createdAt: new Date(),
     editedAt: null,
   };
+  if (input.teeHash) doc.teeHash = input.teeHash;
   await db.collection<MessageDoc>(collections.messages).insertOne(doc);
   return doc;
 }
@@ -64,5 +67,6 @@ export function publicMessage(m: MessageDoc) {
     cascadeHop: m.cascadeHop ?? null,
     createdAt: m.createdAt.toISOString(),
     editedAt: m.editedAt?.toISOString() ?? null,
+    teeHash: m.teeHash ?? null,
   };
 }

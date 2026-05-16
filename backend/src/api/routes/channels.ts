@@ -16,6 +16,8 @@ const CreateChannelBody = z.object({
   topic: z.string().max(256).nullish(),
   defaultAgentId: z.string().regex(/^[a-f0-9]{24}$/).nullish(),
   position: z.number().int().nonnegative().optional(),
+  /** When true, mark this channel as TEE-attested (private). */
+  tee: z.boolean().optional(),
 });
 
 const PatchChannelBody = z.object({
@@ -57,6 +59,7 @@ export function channelRoutes(deps: ChannelRouteDeps) {
         topic: parsed.data.topic ?? null,
         defaultAgentId,
         position: parsed.data.position,
+        tee: parsed.data.tee,
       });
       return c.json({ channel: publicChannel(ch) }, 201);
     } catch (e) {

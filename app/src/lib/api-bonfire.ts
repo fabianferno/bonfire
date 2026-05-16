@@ -35,7 +35,7 @@ export const bf = {
 
   createChannel: (
     sid: string,
-    body: { name: string; type?: 'text' | 'voice'; topic?: string; defaultAgentId?: string },
+    body: { name: string; type?: 'text' | 'voice'; topic?: string; defaultAgentId?: string; tee?: boolean },
   ) =>
     api<{ channel: BackendChannel }>('POST', `/v1/servers/${sid}/channels`, body),
 

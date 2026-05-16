@@ -5,7 +5,7 @@ import {
   Hash, Volume2, Plus, ChevronDown, Mic, MicOff, Headphones, Settings,
   UserPlus, Cog, BarChart2, PlusCircle, FolderPlus, CalendarPlus, AppWindow,
   Bell, Shield, LogOut, ShieldAlert, ScrollText, ShieldCheck, PhoneOff, Signal,
-  BookOpen,
+  BookOpen, Lock,
 } from "lucide-react";
 import { useApp, type ChannelType, type AuditEntry } from "@/context/AppContext";
 import { useVoiceCtx } from "@/context/VoiceContext";
@@ -21,6 +21,7 @@ export default function ServerSidebar() {
   const [newChType, setNewChType] = useState<ChannelType>("text");
   const [chName, setChName] = useState("");
   const [chDesc, setChDesc] = useState("");
+  const [chTee, setChTee] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showAuditLog, setShowAuditLog] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -47,8 +48,14 @@ export default function ServerSidebar() {
 
   const handleCreateCh = () => {
     if (!chName.trim()) return;
-    createChannel(activeServer.id, chName.trim().toLowerCase().replace(/\s+/g, "-"), newChType, chDesc.trim());
-    setChName(""); setChDesc(""); setShowChannelModal(false);
+    createChannel(
+      activeServer.id,
+      chName.trim().toLowerCase().replace(/\s+/g, "-"),
+      newChType,
+      chDesc.trim(),
+      newChType === "text" ? { tee: chTee } : undefined,
+    );
+    setChName(""); setChDesc(""); setChTee(false); setShowChannelModal(false);
   };
 
   const handleLeave = () => { leaveServer(activeServerId); router.push("/workspace"); setShowDropdown(false); };
@@ -117,6 +124,7 @@ export default function ServerSidebar() {
           <ChannelCategory label="Text Channels" onAdd={() => { setNewChType("text"); setShowChannelModal(true); }} />
           {textChannels.map(ch => (
             <ChannelRow key={ch.id} name={ch.name} type="text"
+              tee={ch.tee}
               active={ch.id === activeChannelId}
               onClick={() => setActiveChannel(ch.id)} />
           ))}
@@ -271,6 +279,47 @@ export default function ServerSidebar() {
               <ModalInput value={chDesc} onChange={e => setChDesc(e.target.value)} placeholder="What is this channel about?" />
             </div>
           )}
+          {newChType === "text" && (
+            <button
+              type="button"
+              onClick={() => setChTee(v => !v)}
+              className="flex items-start gap-3 px-3 py-3 rounded-lg text-left transition-colors w-full"
+              style={{
+                background: chTee ? "rgba(255,140,40,0.10)" : "var(--bf-quaternary)",
+                border: `1px solid ${chTee ? "var(--bf-fire)" : "var(--bf-quinary)"}`,
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: chTee ? "var(--bf-fire)" : "var(--bf-quinary)", color: chTee ? "black" : "var(--bf-symbol)" }}
+              >
+                <Lock size={16} strokeWidth={2.5} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white">Private channel</span>
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                    style={{ background: "var(--bf-fire)", color: "black", letterSpacing: "0.04em" }}
+                  >
+                    TEE
+                  </span>
+                </div>
+                <p className="text-xs mt-0.5" style={{ color: "var(--bf-gray)" }}>
+                  Skips the server&apos;s shared knowledge base. Each reply is enclave-attested with a unique hash.
+                </p>
+              </div>
+              <div
+                className="w-10 h-6 rounded-full flex-shrink-0 mt-1 transition-colors relative"
+                style={{ background: chTee ? "var(--bf-fire)" : "var(--bf-quinary)" }}
+              >
+                <span
+                  className="absolute top-0.5 w-5 h-5 rounded-full transition-all"
+                  style={{ background: "white", left: chTee ? "calc(100% - 22px)" : "2px" }}
+                />
+              </div>
+            </button>
+          )}
         </Modal>
       )}
 
@@ -324,17 +373,32 @@ function VoiceChannelRow({ name, active, joined, joining, onClick }: {
 
 // ── Standard channel row ──────────────────────────────────────────────────────
 
-function ChannelRow({ name, type, active, onClick }: { name: string; type: ChannelType; active: boolean; onClick: () => void }) {
+function ChannelRow({ name, type, active, onClick, tee }: { name: string; type: ChannelType; active: boolean; onClick: () => void; tee?: boolean }) {
   return (
     <button onClick={onClick}
       className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-left text-sm transition-colors"
       style={{ background: active ? "var(--bf-quinary)" : "transparent", color: active ? "white" : "var(--bf-senary)" }}
       onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-      {type === "text"
-        ? <Hash size={18} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} />
-        : <Volume2 size={18} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} />}
+      {tee
+        ? <Lock size={16} style={{ color: active ? "var(--bf-fire)" : "var(--bf-symbol)", flexShrink: 0 }} strokeWidth={2} />
+        : type === "text"
+          ? <Hash size={18} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} />
+          : <Volume2 size={18} style={{ color: "var(--bf-symbol)", flexShrink: 0 }} />}
       <span className="truncate flex-1">{name}</span>
+      {tee && (
+        <span
+          title="TEE-attested (private) channel"
+          className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0"
+          style={{
+            background: active ? "var(--bf-fire)" : "rgba(255,140,40,0.18)",
+            color: active ? "black" : "var(--bf-fire)",
+            letterSpacing: "0.04em",
+          }}
+        >
+          TEE
+        </span>
+      )}
     </button>
   );
 }

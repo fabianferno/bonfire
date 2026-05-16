@@ -6,6 +6,7 @@ import { findAgentByIdOrSlug } from './registry.js';
 import { findUserById } from '../users/service.js';
 import { invokeAgent, openAgentStream, type TenantPayload } from './client.js';
 import { insertMessage } from '../messages/service.js';
+import { maybeReplyAttestation } from '../channels/service.js';
 import { log } from '../util/logger.js';
 import { registerStream } from '../messages/stream-registry.js';
 import { resolveMentions } from '../messages/mentions.js';
@@ -141,7 +142,10 @@ export async function startStreamingInvocation(
 ): Promise<StreamingHandle[]> {
   const handles: StreamingHandle[] = [];
   const chatId = chatIdForChannel(ctx.channel._id);
-  const knowledgeBlock = await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
+  // TEE channels: privacy boundary — skip knowledge-base injection.
+  const knowledgeBlock = ctx.channel.tee
+    ? null
+    : await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
   const textForAgent = knowledgeBlock
     ? `${knowledgeBlock}\n\n${ctx.userMessage.content}`
     : ctx.userMessage.content;
@@ -181,6 +185,7 @@ export async function startStreamingInvocation(
             authorId: agent._id,
             content: finalText,
             mentions: [],
+            teeHash: maybeReplyAttestation(ctx.channel),
           });
         },
       });
@@ -195,7 +200,10 @@ export async function startStreamingInvocation(
 export async function runInvocation(ctx: InvocationContext, agents: AgentDoc[]): Promise<MessageDoc[]> {
   const out: MessageDoc[] = [];
   const chatId = chatIdForChannel(ctx.channel._id);
-  const knowledgeBlock = await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
+  // TEE channels: privacy boundary — skip knowledge-base injection.
+  const knowledgeBlock = ctx.channel.tee
+    ? null
+    : await buildKnowledgeBlock(ctx.db, ctx.channel.serverId);
   const textForAgent = knowledgeBlock
     ? `${knowledgeBlock}\n\n${ctx.userMessage.content}`
     : ctx.userMessage.content;
@@ -214,6 +222,7 @@ export async function runInvocation(ctx: InvocationContext, agents: AgentDoc[]):
         authorId: agent._id,
         content: replyText,
         mentions: [],
+        teeHash: maybeReplyAttestation(ctx.channel),
       });
       out.push(persisted);
     } catch (e) {
@@ -445,7 +454,10 @@ async function runInvocationLinked(args: {
   const peerSlugs = await peerSlugsForChannel(args.db, args.channel);
   const speakerLabel = await speakerLabelFor(args.db, args.parent);
   const speakerIsHuman = args.parent.authorType === 'user';
-  const knowledgeBlock = await buildKnowledgeBlock(args.db, args.channel.serverId);
+  // TEE channels: privacy boundary — skip knowledge-base injection on every hop.
+  const knowledgeBlock = args.channel.tee
+    ? null
+    : await buildKnowledgeBlock(args.db, args.channel.serverId);
   for (const agent of args.agents) {
     const startMs = Date.now();
     try {
@@ -531,6 +543,7 @@ Your response (as @${agent.slug}):`;
         authorId: agent._id,
         content: replyText,
         mentions: [],
+        teeHash: maybeReplyAttestation(args.channel),
       });
       // Backfill cascade metadata. insertMessage doesn't accept these fields yet.
       await args.db.collection(collections.messages).updateOne(

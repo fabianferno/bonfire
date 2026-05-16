@@ -27,6 +27,9 @@ export interface BackendChannel {
   position: number;
   cascadeEnabled: boolean;
   createdAt: string;
+  /** TEE-attested (private) channel. Knowledge injection skipped; replies stamped. */
+  tee?: boolean;
+  teeAttestationHash?: string | null;
 }
 
 export interface BackendMessage {
@@ -43,6 +46,8 @@ export interface BackendMessage {
   cascadeHop: number | null;
   createdAt: string;
   editedAt: string | null;
+  /** Present on agent replies in TEE channels — per-message attestation hash. */
+  teeHash?: string | null;
 }
 
 export interface BackendAgent {

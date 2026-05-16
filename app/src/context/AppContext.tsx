@@ -229,9 +229,11 @@ function mapAgent(a: BackendAgent): Agent {
 }
 
 function mapMember(m: BackendMember): Member {
+  // Prefer alias → backend-joined username → displayName → principalId (last resort).
+  // principalId is a Mongo hex and reads like a Privy DID — never desirable.
   return {
     id: m.principalId,
-    username: m.alias ?? m.principalId,
+    username: m.alias ?? m.username ?? m.displayName ?? m.principalId,
     discriminator: "#0000",
     online: true,
   };

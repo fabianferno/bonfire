@@ -70,6 +70,10 @@ export interface BackendMember {
   role: 'owner' | 'admin' | 'member';
   alias: string | null;
   joinedAt: string;
+  /** Populated by the backend for principalType==='user' (joined from users collection). */
+  username?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface BackendServerWallet {

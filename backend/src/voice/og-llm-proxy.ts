@@ -4,13 +4,20 @@
  * The Python Pipecat bot uses `OpenAILLMService` and needs an
  * OpenAI-shaped chat-completions endpoint. The 0G Compute broker SDK is
  * Node-only — so this proxy:
- *   1. Lazily initialises the broker against `STORAGE_UPLOADER_PRIVATE_KEY`
- *      (the same wallet that pays for storage; reused for inference).
+ *   1. Reads the wallet private key from the request's
+ *      `Authorization: Bearer <hexPrivateKey>` header (Pipecat sends whatever
+ *      we put in `OG_LLM_API_KEY`). One broker is initialised per wallet and
+ *      cached. Falls back to `STORAGE_UPLOADER_PRIVATE_KEY` /
+ *      `DEPLOYER_PRIVATE_KEY` when no bearer is supplied (back-compat with
+ *      curl/health-check usage).
  *   2. Picks a chat-capable service (honouring `OG_BROKER_PROVIDER` if set).
  *   3. Forwards every POST /chat/completions request to that service's
  *      `<endpoint>/v1/proxy/chat/completions`, injecting per-request signed
  *      headers from `broker.inference.getRequestHeaders()`.
  *   4. Streams the response back unchanged (SSE-compatible for Pipecat).
+ *
+ * Result: each voice session pays out of its OWN server wallet, the same way
+ * text chat already does via the agent runtime's env-override flow.
  *
  * Mirrors the working pattern in `agent/src/runtime/llm-client.ts`.
  */
@@ -29,10 +36,13 @@ interface OgLlmProxyState {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   broker: any;
   picked: PickedService;
+  address: string;
 }
 
-let initPromise: Promise<OgLlmProxyState | null> | null = null;
-let initFailedReason: string | null = null;
+// Cache of (walletAddress → init Promise). Concurrent first-requests share
+// the in-flight init instead of triggering N broker bootstraps.
+const brokerCache = new Map<string, Promise<OgLlmProxyState | null>>();
+const failReasons = new Map<string, string>();
 
 async function loadBroker(): Promise<{ createZGComputeNetworkBroker: (wallet: ethers.Wallet) => Promise<unknown> }> {
   const { createRequire } = await import('node:module');
@@ -40,42 +50,51 @@ async function loadBroker(): Promise<{ createZGComputeNetworkBroker: (wallet: et
   return req('@0glabs/0g-serving-broker');
 }
 
-async function initProxy(): Promise<OgLlmProxyState | null> {
-  const privateKey = process.env.STORAGE_UPLOADER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
+/**
+ * Initialise a 0G broker for one specific wallet — ensure ledger, pick a
+ * service. Idempotent and cached by wallet address.
+ */
+async function initBrokerForWallet(privateKey: string): Promise<OgLlmProxyState | null> {
   const rpcUrl = process.env.OG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
-  if (!privateKey) {
-    initFailedReason = 'no private key (STORAGE_UPLOADER_PRIVATE_KEY or DEPLOYER_PRIVATE_KEY)';
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+  let wallet: ethers.Wallet;
+  try {
+    wallet = new ethers.Wallet(privateKey, provider);
+  } catch (e) {
+    failReasons.set('invalid-key', (e as Error).message?.slice(0, 120) ?? 'invalid private key');
     return null;
   }
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const wallet = new ethers.Wallet(privateKey, provider);
-  log.info({ address: wallet.address }, '0G LLM proxy: initialising broker');
+  const address = wallet.address;
+  log.info({ address }, '0G LLM proxy: initialising broker');
+
   const { createZGComputeNetworkBroker } = await loadBroker();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const broker: any = await createZGComputeNetworkBroker(wallet as any);
 
-  // Ensure ledger exists
+  // Ensure ledger exists (3 OG minimum; charged from wallet balance).
   try { await broker.ledger.getLedger(); }
   catch {
-    const balanceWei = await provider.getBalance(wallet.address);
+    const balanceWei = await provider.getBalance(address);
     const balanceOg = Number(ethers.formatEther(balanceWei));
     const reserve = 0.2;
     const amount = Math.max(balanceOg - reserve, 0);
     if (amount < 3) {
-      initFailedReason = `0G ledger requires min 3 OG; ${wallet.address} has ${balanceOg.toFixed(4)} OG`;
-      log.error({ wallet: wallet.address, balanceOg }, '0G LLM proxy: insufficient balance for ledger');
+      const reason = `0G ledger requires min 3 OG; ${address} has ${balanceOg.toFixed(4)} OG`;
+      failReasons.set(address, reason);
+      log.error({ wallet: address, balanceOg }, '0G LLM proxy: insufficient balance for ledger');
       return null;
     }
-    log.info({ wallet: wallet.address, amount }, '0G LLM proxy: creating ledger');
+    log.info({ wallet: address, amount }, '0G LLM proxy: creating ledger');
     await broker.ledger.addLedger(amount);
   }
 
-  // Pick a chat-capable service
+  // Pick a chat-capable service.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const services: any[] = await broker.inference.listService();
   const chat = services.filter((s) => s.serviceType === 'chatbot' || s.serviceType === 'chat');
   if (!chat.length) {
-    initFailedReason = '0G Compute: no chat services available';
+    failReasons.set(address, '0G Compute: no chat services available');
     return null;
   }
 
@@ -95,7 +114,7 @@ async function initProxy(): Promise<OgLlmProxyState | null> {
         try {
           await broker.ledger.transferFund(svc.provider, 'inference', ethers.parseEther('1'));
         } catch (e) {
-          log.warn({ provider: svc.provider, err: (e as Error).message?.slice(0, 200) }, '0G LLM proxy: transferFund failed, skipping');
+          log.warn({ wallet: address, provider: svc.provider, err: (e as Error).message?.slice(0, 200) }, '0G LLM proxy: transferFund failed, skipping');
           continue;
         }
       }
@@ -103,48 +122,108 @@ async function initProxy(): Promise<OgLlmProxyState | null> {
       picked = { provider: svc.provider, url: svc.url, model: svc.model };
       break;
     } catch (e) {
-      log.debug({ provider: svc.provider, err: (e as Error).message?.slice(0, 120) }, '0G LLM proxy: provider unreachable');
+      log.debug({ wallet: address, provider: svc.provider, err: (e as Error).message?.slice(0, 120) }, '0G LLM proxy: provider unreachable');
     }
   }
   if (!picked) {
-    initFailedReason = '0G Compute: no reachable provider';
+    failReasons.set(address, '0G Compute: no reachable provider');
     return null;
   }
 
-  log.info({ provider: picked.provider, model: picked.model, endpoint: picked.url }, '0G LLM proxy: ready');
-  return { broker, picked };
+  log.info({ wallet: address, provider: picked.provider, model: picked.model, endpoint: picked.url }, '0G LLM proxy: ready');
+  failReasons.delete(address);
+  return { broker, picked, address };
 }
 
-async function getState(): Promise<OgLlmProxyState | null> {
-  if (!initPromise) initPromise = initProxy().catch((e) => {
-    initFailedReason = (e as Error).message ?? 'unknown error';
-    log.error({ err: e }, '0G LLM proxy: init failed');
+/**
+ * Get a cached broker state for the given key, kicking off init if needed.
+ * Caching is keyed by wallet address (multiple keys for the same wallet share state).
+ */
+function getStateForKey(privateKey: string | null): Promise<OgLlmProxyState | null> {
+  if (!privateKey) {
+    failReasons.set('no-key', 'no private key in request and no env fallback');
+    return Promise.resolve(null);
+  }
+  let address: string;
+  try {
+    address = new ethers.Wallet(privateKey).address;
+  } catch {
+    return Promise.resolve(null);
+  }
+  const existing = brokerCache.get(address);
+  if (existing) return existing;
+  const p = initBrokerForWallet(privateKey).catch((e) => {
+    failReasons.set(address, (e as Error).message?.slice(0, 200) ?? 'unknown error');
+    log.error({ wallet: address, err: e }, '0G LLM proxy: init failed');
+    // Drop the failed entry so a later retry can re-attempt
+    brokerCache.delete(address);
     return null;
   });
-  return initPromise;
+  brokerCache.set(address, p);
+  return p;
+}
+
+/**
+ * Pull the private key from `Authorization: Bearer <key>`. Pipecat's OpenAI
+ * client sends the value of `OG_LLM_API_KEY` here. Falls back to the env
+ * platform wallet so old curl smoke tests and the GET /model probe still work.
+ */
+function privateKeyFromRequest(c: Context): string | null {
+  const auth = c.req.header('authorization') ?? c.req.header('Authorization');
+  if (auth) {
+    const m = /^Bearer\s+(.+)$/i.exec(auth);
+    if (m && m[1]) {
+      const candidate = m[1].trim();
+      // Heuristic: a 0G wallet private key is 0x + 64 hex chars. Anything
+      // else (placeholder strings, "unused", etc.) gets ignored so we fall
+      // back to the env wallet.
+      if (/^0x[a-fA-F0-9]{64}$/.test(candidate)) return candidate;
+    }
+  }
+  // Fallback for tests + the /model probe.
+  return process.env.STORAGE_UPLOADER_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY || null;
 }
 
 /**
  * Register the proxy on the given Hono app. Mounts at `/internal/og-llm`.
  *
  * Endpoints:
- *   GET  /internal/og-llm/model          → { model, provider, endpoint } once ready
- *   POST /internal/og-llm/chat/completions → forwards to 0G, OpenAI-shaped
+ *   GET  /internal/og-llm/model          → { model, provider, endpoint, wallet }
+ *                                          (uses env wallet — for sanity checks)
+ *   POST /internal/og-llm/chat/completions → forwards to 0G, OpenAI-shaped.
+ *                                          Wallet derived from Authorization header.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function registerOgLlmProxy(app: Hono<any>): void {
   app.get('/internal/og-llm/model', async (c: Context) => {
-    const state = await getState();
-    if (!state) return c.json({ error: 'og_llm_unavailable', detail: initFailedReason }, 503);
-    return c.json({ model: state.picked.model, provider: state.picked.provider, endpoint: state.picked.url });
+    const pk = privateKeyFromRequest(c);
+    const state = await getStateForKey(pk);
+    if (!state) {
+      return c.json({
+        error: 'og_llm_unavailable',
+        detail: lastFailReason(),
+      }, 503);
+    }
+    return c.json({
+      model: state.picked.model,
+      provider: state.picked.provider,
+      endpoint: state.picked.url,
+      wallet: state.address,
+    });
   });
 
   app.post('/internal/og-llm/chat/completions', async (c: Context) => {
-    const state = await getState();
-    if (!state) return c.json({ error: 'og_llm_unavailable', detail: initFailedReason }, 503);
+    const pk = privateKeyFromRequest(c);
+    const state = await getStateForKey(pk);
+    if (!state) {
+      return c.json({
+        error: 'og_llm_unavailable',
+        detail: lastFailReason(),
+      }, 503);
+    }
 
     const body = await c.req.text();
-    let headers: Record<string, string> = {};
+    const headers: Record<string, string> = {};
     try {
       const signed = await state.broker.inference.getRequestHeaders(state.picked.provider);
       for (const [k, v] of Object.entries(signed ?? {})) {
@@ -171,4 +250,11 @@ export function registerOgLlmProxy(app: Hono<any>): void {
     res.headers.forEach((v, k) => respHeaders.set(k, v));
     return new Response(res.body, { status: res.status, headers: respHeaders });
   });
+}
+
+function lastFailReason(): string {
+  // Pull the most recent reason from any wallet (this is best-effort
+  // diagnostic surfacing, not authoritative).
+  const reasons = Array.from(failReasons.values());
+  return reasons[reasons.length - 1] ?? 'unknown';
 }

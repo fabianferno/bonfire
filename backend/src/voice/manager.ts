@@ -214,6 +214,22 @@ export class VoiceManager {
       }
     }
 
+    // Look up the room's server wallet — voice LLM inference will be billed
+    // against it (mirrors the text-chat envOverride.DEPLOYER_PRIVATE_KEY path).
+    // Falls back to env OG_LLM_API_KEY only if the server has no wallet on
+    // record (legacy rows / safety net).
+    type ServerWithWallet = { wallet?: { privateKey?: string } };
+    const serverDoc = await this.db
+      .collection<ServerWithWallet>('servers')
+      .findOne({ _id: session.serverId });
+    const serverWalletKey = serverDoc?.wallet?.privateKey ?? '';
+    if (!serverWalletKey) {
+      log.warn(
+        { serverId: session.serverId.toHexString(), agentSlug: agent.slug },
+        'voice invite: server has no wallet; voice LLM will use platform fallback wallet',
+      );
+    }
+
     // Mint a bot meeting token (owner-level so it can mute/kick others).
     const botToken = await this.daily.mintMeetingToken({
       roomName: session.dailyRoomName,
@@ -233,7 +249,11 @@ export class VoiceManager {
       AGENT_SLUG: agent.slug,
       AGENT_NAME: agent.name,
       OG_LLM_BASE_URL: process.env.OG_LLM_BASE_URL ?? '',
-      OG_LLM_API_KEY: process.env.OG_LLM_API_KEY ?? '',
+      // Pipecat's OpenAILLMService sends this as `Authorization: Bearer <key>`.
+      // The 0G LLM proxy reads it back and uses it as the wallet for broker
+      // signing — so each voice room's inference is billed to that room's
+      // server wallet. Empty string ⇒ proxy falls back to its env wallet.
+      OG_LLM_API_KEY: serverWalletKey || process.env.OG_LLM_API_KEY || '',
       OG_LLM_MODEL: process.env.OG_LLM_MODEL ?? '',
       DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ?? '',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',

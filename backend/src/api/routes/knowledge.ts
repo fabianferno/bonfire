@@ -73,28 +73,16 @@ export function knowledgeRoutes(deps: KnowledgeRouteDeps) {
       const server = c.get('server');
       if (!q) return c.json({ results: [] });
       const limit = Math.min(parseInt(c.req.query('limit') || '5', 10) || 5, 20);
+      // MongoDB's $text + $meta projections need permissive types — the
+      // driver's Sort/Projection typings don't model $meta directly.
       const hits = await deps.db
         .collection<KnowledgeDocDoc>(collections.knowledgeDocs)
-        .find(
-          { serverId: server._id, $text: { $search: q } },
-          {
-            projection: {
-              score: { $meta: 'textScore' },
-              title: 1,
-              content: 1,
-              createdAt: 1,
-              sizeBytes: 1,
-              source: 1,
-              filename: 1,
-              mimeType: 1,
-              channelId: 1,
-              serverId: 1,
-              createdBy: 1,
-              updatedAt: 1,
-            } as Record<string, unknown>,
-          },
-        )
-        .sort({ score: { $meta: 'textScore' } } as Record<string, unknown>)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find({ serverId: server._id, $text: { $search: q } } as any, {
+          projection: { score: { $meta: 'textScore' } },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          sort: { score: { $meta: 'textScore' } } as any,
+        })
         .limit(limit)
         .toArray();
       const results = hits.map((d) => ({
